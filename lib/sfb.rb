@@ -1,4 +1,4 @@
-require "sfb/version"
+require("sfb/version")
 
 module Sfb
   class Error < StandardError; end
