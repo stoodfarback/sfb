@@ -1,4 +1,5 @@
 require("sfb/version")
+require("sfb/outside_gems")
 
 module Sfb
   class Error < StandardError; end
