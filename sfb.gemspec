@@ -27,6 +27,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency("oj")
+  spec.add_dependency("xxhash")
   spec.add_dependency("activesupport")
   spec.add_dependency("pry")
   spec.add_dependency("rubocop")

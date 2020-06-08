@@ -6,6 +6,7 @@ PATH
       oj
       pry
       rubocop
+      xxhash
 
 GEM
   remote: https://rubygems.org/
@@ -50,6 +51,7 @@ GEM
     tzinfo (1.2.7)
       thread_safe (~> 0.1)
     unicode-display_width (1.7.0)
+    xxhash (0.4.0)
     zeitwerk (2.3.0)
 
 PLATFORMS
