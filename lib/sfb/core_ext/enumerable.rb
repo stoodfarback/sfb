@@ -97,4 +97,12 @@ module Enumerable
   def uniq_length(&blk)
     uniq(&blk).length
   end
+
+  def find_yield(&blk)
+    each do |x|
+      r = blk.(x)
+      return r if r
+    end
+    nil
+  end
 end
