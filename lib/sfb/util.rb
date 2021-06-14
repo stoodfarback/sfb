@@ -35,4 +35,63 @@ module Sfb::Util
     key_i_signed = [key_i].pack("Q").unpack1("q")
     key_i_signed
   end
+
+  def self.random
+    self.random_string(len: 16)
+  end
+
+  # output length is 32 characters by default
+  # type can be :base32, :random_letters, :pronounceable
+  def self.random_string(prng: SecureRandom, len: nil, type: :base32)
+    str = +""
+    max_len = len.try(:max) || len.try(:to_i) || 32
+    while str.length < max_len
+      str_to_add =
+        case type
+        when :base32
+          random_string_some_base32(prng)
+        when :random_letters
+          random_string_some_random_letters(prng)
+        when :pronounceable
+          random_string_some_pronounceable(prng, max_len)
+        end
+      str << str_to_add
+    end
+    str = str.first(max_len)
+
+    case len
+    when Range, Array
+      str.first(len.to_a.sample(random: prng))
+    when Integer
+      str.first(len)
+    else
+      str
+    end
+  end
+
+  def self.random_string_some_base32(prng)
+    num = prng.random_number(2**128)
+    Base32::Crockford.encode(num).downcase
+  end
+
+  def self.random_string_some_random_letters(prng)
+    num = prng.random_number(2**128)
+    str = Base32::Crockford.encode(num).downcase
+    str.gsub!(/\d/, "")
+    str
+  end
+
+  def self.random_string_some_pronounceable(prng, max_len)
+    alphabet = ("a".."z").to_a
+    vowels = %w[a e i o u]
+    consonants = alphabet - vowels
+
+    r = []
+    (max_len / 3.0).ceil.times do
+      r << consonants.sample(random: prng)
+      r << vowels.sample(random: prng)
+      r << alphabet.sample(random: prng)
+    end
+    r.join
+  end
 end
