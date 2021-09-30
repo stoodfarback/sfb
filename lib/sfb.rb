@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require("sfb/version")
 require("sfb/outside_gems")
 require("sfb/core_ext")

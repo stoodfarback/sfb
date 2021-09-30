@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 $redis ||= Redis.new
 
 module Sfb::Util

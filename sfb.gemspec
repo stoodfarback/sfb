@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative("lib/sfb/version")
 
 Gem::Specification.new do |spec|
@@ -23,13 +25,13 @@ Gem::Specification.new do |spec|
   spec.executables   = spec.files.grep(%r{^exe/}) {|f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.add_dependency("oj")
-  spec.add_dependency("xxhash")
   spec.add_dependency("activesupport")
-  spec.add_dependency("pry")
-  spec.add_dependency("rubocop")
   spec.add_dependency("base32-crockford")
   spec.add_dependency("http")
   spec.add_dependency("nokogiri")
+  spec.add_dependency("oj")
+  spec.add_dependency("pry")
   spec.add_dependency("redis")
+  spec.add_dependency("rubocop")
+  spec.add_dependency("xxhash")
 end

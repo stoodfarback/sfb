@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Enumerable
   def sort_by_with_nils_first
     sort do |a, b|
@@ -70,7 +72,7 @@ module Enumerable
   def stable_sort
     self.map.with_index.sort do |(a, i_a), (b, i_b)|
       c = yield(a, b)
-      c != 0 ? c : i_a <=> i_b
+      c == 0 ? i_a <=> i_b : c
     end.map(&:first)
   end
 

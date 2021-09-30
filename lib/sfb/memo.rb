@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Sfb::Memo
   def memo(method_name)
     method_name_s = method_name.to_s
