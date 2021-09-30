@@ -6,8 +6,8 @@ require("sfb/core_ext")
 require("sfb/util")
 require("sfb/store")
 require("sfb/memo")
+require("sfb/kv")
 
 module Sfb
   class Error < StandardError; end
-  # Your code goes here...
 end
