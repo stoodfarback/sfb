@@ -1,6 +1,13 @@
 require_relative("test_helper")
 
 class TestUtil < Minitest::Test
+  def test_including
+    t = Module.new do
+      include(Sfb::Util)
+    end
+    assert_equal("7o66805she887", t.xxhash64("aoeu"))
+  end
+
   def test_xxhash64
     assert_equal("7o66805she887", Sfb::Util.xxhash64("aoeu"))
     assert_equal(8942116968796201223, Sfb::Util.xxhash64i("aoeu"))
