@@ -7,6 +7,7 @@ require("sfb/util")
 require("sfb/store")
 require("sfb/memo")
 require("sfb/kv")
+require("sfb/rate_limit")
 
 module Sfb
   class Error < StandardError; end
