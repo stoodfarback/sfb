@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative("test_helper")
 
 class TestUtil < Minitest::Test
@@ -10,7 +12,7 @@ class TestUtil < Minitest::Test
 
   def test_xxhash64
     assert_equal("7o66805she887", Sfb::Util.xxhash64("aoeu"))
-    assert_equal(8942116968796201223, Sfb::Util.xxhash64i("aoeu"))
+    assert_equal(8_942_116_968_796_201_223, Sfb::Util.xxhash64i("aoeu"))
   end
 
   def test_activerecord_pg_advisory_xact_lock
@@ -39,17 +41,17 @@ class TestUtil < Minitest::Test
   end
 
   def test_human_to_number
-    assert_equal(100, Sfb::Util::human_to_number("100"))
-    assert_equal(100000, Sfb::Util::human_to_number("100 k"))
-    assert_equal(100000, Sfb::Util::human_to_number("100k"))
-    assert_equal(100000000, Sfb::Util::human_to_number("100m"))
+    assert_equal(100, Sfb::Util.human_to_number("100"))
+    assert_equal(100_000, Sfb::Util.human_to_number("100 k"))
+    assert_equal(100_000, Sfb::Util.human_to_number("100k"))
+    assert_equal(100_000_000, Sfb::Util.human_to_number("100m"))
   end
 
   def test_human_size_to_bytes
-    assert_equal(100, Sfb::Util::human_size_to_bytes("100"))
-    assert_equal(102400, Sfb::Util::human_size_to_bytes("100 kb"))
-    assert_equal(102400, Sfb::Util::human_size_to_bytes("100kb"))
-    assert_equal(104857600, Sfb::Util::human_size_to_bytes("100 mib"))
+    assert_equal(100, Sfb::Util.human_size_to_bytes("100"))
+    assert_equal(102_400, Sfb::Util.human_size_to_bytes("100 kb"))
+    assert_equal(102_400, Sfb::Util.human_size_to_bytes("100kb"))
+    assert_equal(104_857_600, Sfb::Util.human_size_to_bytes("100 mib"))
   end
 
   def test_str_truncate
