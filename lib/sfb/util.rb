@@ -58,14 +58,18 @@ module Sfb::Util
           random_string_some_random_letters(prng)
         when :pronounceable
           random_string_some_pronounceable(prng, max_len)
+        else
+          raise(Sfb::Error, "Unknown type: #{type}")
         end
       str << str_to_add
     end
     str = str.first(max_len)
 
     case len
-    when Range, Array
+    when Array
       str.first(len.to_a.sample(random: prng))
+    when Range
+      str.first(prng.rand(len))
     when Integer
       str.first(len)
     else
@@ -134,13 +138,13 @@ module Sfb::Util
       raise("couldn't parse human_size_to_bytes: #{human.inspect}")
     end
 
-    number * multiplier
+    (number * multiplier).round
   end
 
   def self.str_truncate(str, len = 80)
     str = str.to_s
     if str.length > len
-      str = str[0..(len - 3)] + "..."
+      str = str[0..(len - 4)] + "..."
     end
     str
   end
@@ -161,6 +165,7 @@ module Sfb::Util
 
   def self.redis_set(key, val, **kwargs)
     $redis.set(key, val.to_json, **kwargs)
+    val
   end
 
   def self.redis_fetch(key, **kwargs, &blk)

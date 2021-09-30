@@ -5,6 +5,7 @@ PATH
       activesupport
       base32-crockford
       http
+      minitest
       nokogiri
       oj
       pry
