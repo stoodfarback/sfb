@@ -1,3 +1,5 @@
+$redis ||= Redis.new
+
 module Sfb::Util
   def self.xxhash64(s)
     XXhash.xxh64(s).to_s(32)
@@ -93,5 +95,83 @@ module Sfb::Util
       r << alphabet.sample(random: prng)
     end
     r.join
+  end
+
+  def self.http_get(url)
+    HTTP.
+      headers("User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36").
+      use(:auto_inflate).
+      follow(max_hops: 5).
+      get(url).
+      to_s
+  end
+
+  HUMAN_TO_NUMBER_MULTIPLIERS = { "k" => 10**3, "m" => 10**6, "b" => 10**9 }.freeze
+  def self.human_to_number(human)
+    number = human[/(\d+\.?)+/].to_f
+    factor = human.downcase[/[a-z]+$/]
+    multiplier = factor.blank? ? 1 : HUMAN_TO_NUMBER_MULTIPLIERS[factor]
+    if !multiplier
+      raise("couldn't parse human_to_number: #{human.inspect}")
+    end
+
+    number * multiplier
+  end
+
+  HUMAN_SIZE_TO_NUMBER_MULTIPLIERS = {
+    "kb" => 1024**1, "kib" => 1024**1,
+    "mb" => 1024**2, "mib" => 1024**2,
+    "gb" => 1024**3, "gib" => 1024**3,
+    "tb" => 1024**4, "tib" => 1024**4,
+  }.freeze
+  def self.human_size_to_bytes(human)
+    number = human[/(\d+\.?)+/].to_f
+    factor = human.downcase[/[a-z]+$/]
+    multiplier = factor.blank? ? 1 : HUMAN_SIZE_TO_NUMBER_MULTIPLIERS[factor]
+    if !multiplier
+      raise("couldn't parse human_size_to_bytes: #{human.inspect}")
+    end
+
+    number * multiplier
+  end
+
+  def self.str_truncate(str, len = 80)
+    str = str.to_s
+    if str.length > len
+      str = str[0..(len - 3)] + "..."
+    end
+    str
+  end
+
+  def self.noko(html)
+    Nokogiri::HTML(html)
+  end
+
+  def self.redis_exists?(key)
+    $redis.exists?(key)
+  end
+
+  def self.redis_get(key)
+    if (t = $redis.get(key)).present?
+      JSON.parse(t)
+    end
+  end
+
+  def self.redis_set(key, val, **kwargs)
+    $redis.set(key, val.to_json, **kwargs)
+  end
+
+  def self.redis_fetch(key, **kwargs, &blk)
+    if (r = $redis.get(key)).present?
+      return(JSON.parse(r))
+    end
+
+    blk.().tap do |r|
+      $redis.set(key, r.to_json, **kwargs)
+    end
+  end
+
+  def self.redis_delete(key)
+    $redis.del(key)
   end
 end

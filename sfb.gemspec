@@ -29,4 +29,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency("pry")
   spec.add_dependency("rubocop")
   spec.add_dependency("base32-crockford")
+  spec.add_dependency("http")
+  spec.add_dependency("nokogiri")
+  spec.add_dependency("redis")
 end
