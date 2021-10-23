@@ -43,6 +43,12 @@ module Sfb::KV
     end
   end
 
+  def self.expire(k, seconds)
+    k = k.to_s
+    k_full = redis_prefix + k
+    Sfb::Util.redis_expire(k_full, seconds)
+  end
+
   def self.add_kv_methods(klass)
     prefix = "#{klass.name} "
     method_def_meth = klass.instance_of?(Module) ? :define_singleton_method : :define_method
@@ -57,6 +63,9 @@ module Sfb::KV
     end
     klass.send(method_def_meth, :kv_fetch) do |k, &blk|
       Sfb::KV.fetch(prefix + k, &blk)
+    end
+    klass.send(method_def_meth, :kv_expire) do |k, seconds|
+      Sfb::KV.expire(prefix + k, seconds)
     end
   end
 end

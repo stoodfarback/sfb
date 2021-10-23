@@ -21,6 +21,20 @@ class TestKV < Minitest::Test
     assert_equal("one", KV.fetch("aoeu") { 2 })
   end
 
+  def test_expire
+    key = "dolphin"
+    KV.delete(key)
+    assert_nil(KV.get(key))
+    KV.set(key, "one")
+    assert_equal("one", KV.get(key))
+    KV.expire(key, 2)
+    assert_equal("one", KV.get(key))
+    sleep(1)
+    assert_equal("one", KV.get(key))
+    sleep(1.5)
+    assert_nil(KV.get(key))
+  end
+
   def test_add_kv_methods
     c1 = Class.new do
       def self.name; "Class1"; end

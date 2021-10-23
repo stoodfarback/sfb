@@ -184,6 +184,10 @@ module Sfb::Util
     def redis_delete(key)
       $redis.del(key)
     end
+
+    def redis_expire(key, seconds)
+      $redis.expire(key, seconds.to_f.round)
+    end
   end
 
   extend(ClassMethods)
