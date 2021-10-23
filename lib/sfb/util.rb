@@ -105,12 +105,14 @@ module Sfb::Util
     end
 
     def http_get(url)
+      http_common.get(url).to_s
+    end
+
+    def http_common
       HTTP.
         headers("User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36").
         use(:auto_inflate).
-        follow(max_hops: 5).
-        get(url).
-        to_s
+        follow(max_hops: 5)
     end
 
     HUMAN_TO_NUMBER_MULTIPLIERS = { "k" => 10**3, "m" => 10**6, "b" => 10**9 }.freeze
