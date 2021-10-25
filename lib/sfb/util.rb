@@ -188,6 +188,15 @@ module Sfb::Util
     def redis_expire(key, seconds)
       $redis.expire(key, seconds.to_f.round)
     end
+
+    def rails_helpers
+      $sfb_rails_helpers ||= begin
+        require("action_view/helpers")
+        Class.new do
+          include(ActionView::Helpers)
+        end.new
+      end
+    end
   end
 
   extend(ClassMethods)

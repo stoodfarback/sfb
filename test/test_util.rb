@@ -85,4 +85,9 @@ class TestUtil < Minitest::Test
     assert_equal("one", Sfb::Util.redis_fetch(key) { "one" })
     assert_equal("one", Sfb::Util.redis_fetch(key) { "one" })
   end
+
+  def test_rails_helpers
+    assert_equal("$1,234.57", Sfb::Util.rails_helpers.number_to_currency(1234.5678))
+    assert_equal(Sfb::Util.rails_helpers.object_id, Sfb::Util.rails_helpers.object_id)
+  end
 end
