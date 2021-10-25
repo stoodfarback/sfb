@@ -107,4 +107,9 @@ module Enumerable
     end
     nil
   end
+
+  # TODO: microbm, https://stackoverflow.com/questions/412169/how-to-find-an-item-in-array-which-has-the-most-occurrences
+  def most_common_element
+    tally.max_by(&:last)&.first
+  end
 end
