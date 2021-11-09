@@ -89,5 +89,8 @@ class TestUtil < Minitest::Test
   def test_rails_helpers
     assert_equal("$1,234.57", Sfb::Util.rails_helpers.number_to_currency(1234.5678))
     assert_equal(Sfb::Util.rails_helpers.object_id, Sfb::Util.rails_helpers.object_id)
+
+    # make sure i18n locale file is loaded
+    assert_equal("over 51 years", Sfb::Util.rails_helpers.time_ago_in_words(11111111))
   end
 end

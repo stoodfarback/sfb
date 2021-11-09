@@ -192,6 +192,10 @@ module Sfb::Util
     def rails_helpers
       $sfb_rails_helpers ||= begin
         require("action_view/helpers")
+        locale_path = Gem.loaded_specs["actionview"].full_gem_path + "/lib/action_view/locale/en.yml"
+        ActiveSupport.on_load(:i18n) do
+          I18n.load_path << locale_path
+        end
         Class.new do
           include(ActionView::Helpers)
         end.new
