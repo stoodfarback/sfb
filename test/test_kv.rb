@@ -71,6 +71,9 @@ class TestKV < Minitest::Test
     assert_equal("two", obj2.kv_set("foo", "two"))
     assert_equal("two", obj2.kv_get("foo"))
     assert_equal("one", obj1.kv_get("foo"))
+
+    assert_equal("one", c1.kv_get("foo"))
+    assert_equal("two", c2.kv_get("foo"))
   end
 
   def test_add_kv_methods_delete_all
@@ -80,12 +83,26 @@ class TestKV < Minitest::Test
     end
     KV.add_kv_methods(c)
     obj = c.new
-    obj.kv_set("a:one", 1)
-    obj.kv_set("b:two", 2)
-    assert_equal([1, 2], %w[a:one b:two].map { obj.kv_get(_1) })
+    set_values = -> do
+      obj.kv_set("a:one", 1)
+      obj.kv_set("b:two", 2)
+      obj.kv_set("a:three", 3)
+    end
+    get_values = -> do
+      %w[a:one b:two a:three].map { obj.kv_get(_1) }
+    end
+    set_values.()
+    assert_equal([1, 2, 3], get_values.())
     obj.kv_delete_all_with_prefix("a:")
-    assert_equal([nil, 2], %w[a:one b:two].map { obj.kv_get(_1) })
+    assert_equal([nil, 2, nil], get_values.())
     obj.kv_delete_all
-    assert_equal([nil, nil], %w[a:one b:two].map { obj.kv_get(_1) })
+    assert_equal([nil, nil, nil], get_values.())
+
+    set_values.()
+    assert_equal([1, 2, 3], get_values.())
+    c.kv_delete_all_with_prefix("b:")
+    assert_equal([1, nil, 3], get_values.())
+    c.kv_delete_all
+    assert_equal([nil, nil, nil], get_values.())
   end
 end

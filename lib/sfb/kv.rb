@@ -57,27 +57,33 @@ module Sfb::KV
 
   def self.add_kv_methods(klass)
     prefix = "#{klass.name} "
-    method_def_meth = klass.instance_of?(Module) ? :define_singleton_method : :define_method
-    klass.send(method_def_meth, :kv_get) do |k|
-      Sfb::KV.get(prefix + k)
+    method_def_meths = [:define_singleton_method]
+    if klass.instance_of?(Class)
+      method_def_meths << :define_method
     end
-    klass.send(method_def_meth, :kv_set) do |k, v|
-      Sfb::KV.set(prefix + k, v)
-    end
-    klass.send(method_def_meth, :kv_delete) do |k|
-      Sfb::KV.delete(prefix + k)
-    end
-    klass.send(method_def_meth, :kv_fetch) do |k, &blk|
-      Sfb::KV.fetch(prefix + k, &blk)
-    end
-    klass.send(method_def_meth, :kv_expire) do |k, seconds|
-      Sfb::KV.expire(prefix + k, seconds)
-    end
-    klass.send(method_def_meth, :kv_delete_all_with_prefix) do |k|
-      Sfb::KV.delete_all_with_prefix(prefix + k)
-    end
-    klass.send(method_def_meth, :kv_delete_all) do
-      Sfb::KV.delete_all_with_prefix(prefix)
+
+    method_def_meths.each do |method_def_meth|
+      klass.send(method_def_meth, :kv_get) do |k|
+        Sfb::KV.get(prefix + k)
+      end
+      klass.send(method_def_meth, :kv_set) do |k, v|
+        Sfb::KV.set(prefix + k, v)
+      end
+      klass.send(method_def_meth, :kv_delete) do |k|
+        Sfb::KV.delete(prefix + k)
+      end
+      klass.send(method_def_meth, :kv_fetch) do |k, &blk|
+        Sfb::KV.fetch(prefix + k, &blk)
+      end
+      klass.send(method_def_meth, :kv_expire) do |k, seconds|
+        Sfb::KV.expire(prefix + k, seconds)
+      end
+      klass.send(method_def_meth, :kv_delete_all_with_prefix) do |k|
+        Sfb::KV.delete_all_with_prefix(prefix + k)
+      end
+      klass.send(method_def_meth, :kv_delete_all) do
+        Sfb::KV.delete_all_with_prefix(prefix)
+      end
     end
   end
 end
