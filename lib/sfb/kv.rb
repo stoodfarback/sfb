@@ -49,6 +49,12 @@ module Sfb::KV
     Sfb::Util.redis_expire(k_full, seconds)
   end
 
+  def self.delete_all_with_prefix(k)
+    k = k.to_s
+    k_full = redis_prefix + k
+    Sfb::Util.redis_delete_all_with_prefix(k_full)
+  end
+
   def self.add_kv_methods(klass)
     prefix = "#{klass.name} "
     method_def_meth = klass.instance_of?(Module) ? :define_singleton_method : :define_method
@@ -66,6 +72,12 @@ module Sfb::KV
     end
     klass.send(method_def_meth, :kv_expire) do |k, seconds|
       Sfb::KV.expire(prefix + k, seconds)
+    end
+    klass.send(method_def_meth, :kv_delete_all_with_prefix) do |k|
+      Sfb::KV.delete_all_with_prefix(prefix + k)
+    end
+    klass.send(method_def_meth, :kv_delete_all) do
+      Sfb::KV.delete_all_with_prefix(prefix)
     end
   end
 end

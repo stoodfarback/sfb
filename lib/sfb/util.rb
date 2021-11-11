@@ -189,6 +189,11 @@ module Sfb::Util
       $redis.expire(key, seconds.to_f.round)
     end
 
+    def redis_delete_all_with_prefix(prefix)
+      keys = $redis.keys(prefix + "*")
+      $redis.del(keys)
+    end
+
     def rails_helpers
       $sfb_rails_helpers ||= begin
         require("action_view/helpers")

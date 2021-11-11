@@ -35,6 +35,20 @@ class TestKV < Minitest::Test
     assert_nil(KV.get(key))
   end
 
+  def test_delete_all_with_prefix
+    %w[foo:one foo:two bar:three].each { KV.delete(_1) }
+    KV.set("foo:one", 1)
+    KV.set("foo:two", 2)
+    KV.set("bar:three", 3)
+    assert_equal(1, KV.get("foo:one"))
+    assert_equal(2, KV.get("foo:two"))
+    assert_equal(3, KV.get("bar:three"))
+    assert_equal(2, KV.delete_all_with_prefix("foo:"))
+    assert_nil(KV.get("foo:one"))
+    assert_nil(KV.get("foo:two"))
+    assert_equal(3, KV.get("bar:three"))
+  end
+
   def test_add_kv_methods
     c1 = Class.new do
       def self.name; "Class1"; end
@@ -57,5 +71,21 @@ class TestKV < Minitest::Test
     assert_equal("two", obj2.kv_set("foo", "two"))
     assert_equal("two", obj2.kv_get("foo"))
     assert_equal("one", obj1.kv_get("foo"))
+  end
+
+  def test_add_kv_methods_delete_all
+    class_name = "Class#{Sfb::Util.random}"
+    c = Class.new do
+      define_singleton_method(:name) { class_name }
+    end
+    KV.add_kv_methods(c)
+    obj = c.new
+    obj.kv_set("a:one", 1)
+    obj.kv_set("b:two", 2)
+    assert_equal([1, 2], %w[a:one b:two].map { obj.kv_get(_1) })
+    obj.kv_delete_all_with_prefix("a:")
+    assert_equal([nil, 2], %w[a:one b:two].map { obj.kv_get(_1) })
+    obj.kv_delete_all
+    assert_equal([nil, nil], %w[a:one b:two].map { obj.kv_get(_1) })
   end
 end
