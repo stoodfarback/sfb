@@ -99,6 +99,8 @@ class TestUtil < Minitest::Test
     assert_equal(Sfb::Util.rails_helpers.object_id, Sfb::Util.rails_helpers.object_id)
 
     # make sure i18n locale file is loaded
-    assert_equal("over 51 years", Sfb::Util.rails_helpers.time_ago_in_words(11111111))
+    t = 11111111
+    t += Time.now.to_i - Date.parse("2022-01-01").at_noon.to_i
+    assert_equal("over 51 years", Sfb::Util.rails_helpers.time_ago_in_words(t))
   end
 end
