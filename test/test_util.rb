@@ -8,6 +8,9 @@ class TestUtil < Minitest::Test
       include(Sfb::Util)
     end
     assert_equal("7o66805she887", t.xxhash64("aoeu"))
+    agent = t::MOST_COMMON_USER_AGENT
+    assert(agent.is_a?(String))
+    assert_equal(agent, Sfb::Util::MOST_COMMON_USER_AGENT)
   end
 
   def test_xxhash64
@@ -38,6 +41,11 @@ class TestUtil < Minitest::Test
     html = Sfb::Util.http_get("http://example.com")
     noko = Sfb::Util.noko(html)
     assert_equal("Example Domain", noko.at_css("h1").text)
+  end
+
+  def test_http_agent
+    agent = Sfb::Util.http_common.default_options.headers["User-Agent"]
+    assert(agent.include?("Chrome"))
   end
 
   def test_human_to_number

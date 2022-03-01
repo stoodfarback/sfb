@@ -3,6 +3,10 @@
 $redis ||= Redis.new
 
 module Sfb::Util
+  MOST_COMMON_USER_AGENT = <<~HEREDOC.strip
+    Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36
+  HEREDOC
+
   module ClassMethods
     def xxhash64(s)
       XXhash.xxh64(s).to_s(32)
@@ -110,7 +114,7 @@ module Sfb::Util
 
     def http_common
       HTTP.
-        headers("User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36").
+        headers("User-Agent" => MOST_COMMON_USER_AGENT).
         use(:auto_inflate).
         follow(max_hops: 5)
     end
