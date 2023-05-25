@@ -69,6 +69,19 @@ class TestUtil < Minitest::Test
     assert_equal("ao...", Sfb::Util.str_truncate("aoeuidh", 5))
   end
 
+  def test_str_indent
+    assert_equal(<<~OUTPUT, "start:\n" + Sfb::Util.str_indent(<<~INPUT))
+      start:
+        a
+          b
+        c
+    OUTPUT
+      a
+        b
+      c
+    INPUT
+  end
+
   def test_noko
     noko = Sfb::Util.noko("<p>Hey</p>")
     assert_equal("Hey", noko.text)

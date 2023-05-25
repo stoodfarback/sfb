@@ -156,6 +156,15 @@ module Sfb::Util
       str
     end
 
+    def str_indent(str, indent: "  ")
+      r = +""
+      str.each_line do |line|
+        r << indent
+        r << line
+      end
+      r
+    end
+
     def noko(html)
       Nokogiri::HTML(html)
     end
