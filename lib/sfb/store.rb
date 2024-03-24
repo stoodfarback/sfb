@@ -44,7 +44,7 @@ class Sfb::Store
     end
   end
 
-  def get_or_set(k)
+  def get_or_set(k, &)
     if key?(k)
       self[k]
     else
