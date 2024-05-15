@@ -4,6 +4,7 @@ require("active_support/core_ext/object/try")
 require("active_support/core_ext/object/blank")
 require("active_support/core_ext/string/access")
 require("active_support/core_ext/array/grouping")
+require("active_support/core_ext/enumerable")
 require("pry")
 require("redis")
 
