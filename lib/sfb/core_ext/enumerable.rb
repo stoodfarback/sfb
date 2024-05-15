@@ -91,13 +91,13 @@ module Enumerable
   end
 
   # from microbm, faster/smaller than map -> uniq, faster/smaller than set
-  def uniq_map(&blk)
-    uniq(&blk).map(&blk)
+  def uniq_map(&)
+    uniq(&).map(&)
   end
 
   # from microbm, faster/smaller than map -> uniq, faster/smaller than set
-  def uniq_length(&blk)
-    uniq(&blk).length
+  def uniq_length(&)
+    uniq(&).length
   end
 
   def find_yield(&blk)

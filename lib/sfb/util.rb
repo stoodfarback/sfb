@@ -87,12 +87,12 @@ module Sfb::Util
     end
 
     def random_string_some_base32(prng)
-      num = prng.random_number(2**128)
+      num = prng.random_number(2 ** 128)
       Base32::Crockford.encode(num).downcase
     end
 
     def random_string_some_random_letters(prng)
-      num = prng.random_number(2**128)
+      num = prng.random_number(2 ** 128)
       str = Base32::Crockford.encode(num).downcase
       str.gsub!(/\d/, "")
       str
@@ -124,7 +124,7 @@ module Sfb::Util
         follow(max_hops: 5)
     end
 
-    HUMAN_TO_NUMBER_MULTIPLIERS = { "k" => 10**3, "m" => 10**6, "b" => 10**9 }.freeze
+    HUMAN_TO_NUMBER_MULTIPLIERS = { "k" => 10 ** 3, "m" => 10 ** 6, "b" => 10 ** 9 }.freeze
     def human_to_number(human)
       number = human[/(\d+\.?)+/].to_f
       factor = human.downcase[/[a-z]+$/]
@@ -137,10 +137,10 @@ module Sfb::Util
     end
 
     HUMAN_SIZE_TO_NUMBER_MULTIPLIERS = {
-      "kb" => 1024**1, "kib" => 1024**1,
-      "mb" => 1024**2, "mib" => 1024**2,
-      "gb" => 1024**3, "gib" => 1024**3,
-      "tb" => 1024**4, "tib" => 1024**4,
+      "kb" => 1024 ** 1, "kib" => 1024 ** 1,
+      "mb" => 1024 ** 2, "mib" => 1024 ** 2,
+      "gb" => 1024 ** 3, "gib" => 1024 ** 3,
+      "tb" => 1024 ** 4, "tib" => 1024 ** 4,
     }.freeze
     def human_size_to_bytes(human)
       number = human[/(\d+\.?)+/].to_f
@@ -185,8 +185,8 @@ module Sfb::Util
       end
     end
 
-    def redis_set(key, val, **kwargs)
-      $redis.set(key, val.to_json, **kwargs)
+    def redis_set(key, val, **)
+      $redis.set(key, val.to_json, **)
       val
     end
 

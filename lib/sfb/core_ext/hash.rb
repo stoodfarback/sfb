@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Hash
   def same_keys?(other_hash)
     return(false) if size != other_hash.size
