@@ -5,6 +5,7 @@ require("active_support/core_ext/object/blank")
 require("active_support/core_ext/string/access")
 require("active_support/core_ext/array/grouping")
 require("active_support/core_ext/enumerable")
+require("active_support/core_ext/string/inflections")
 require("pry")
 require("redis")
 
