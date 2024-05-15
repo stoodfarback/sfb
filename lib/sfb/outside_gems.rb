@@ -7,6 +7,7 @@ require("active_support/core_ext/array/grouping")
 require("active_support/core_ext/enumerable")
 require("active_support/core_ext/string/inflections")
 require("active_support/core_ext/array/wrap")
+require("active_support/core_ext/string/starts_ends_with")
 require("pry")
 require("redis")
 
