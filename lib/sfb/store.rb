@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
+require("yaml/store")
+
 class Sfb::Store
   # a wrapper for YAML::Store with implicit transactions and caching
 
   def initialize(file_path)
-    require("yaml/store")
     @store = YAML::Store.new(file_path, thread_safe = true)
     @store.ultra_safe = true
     @cache = {}

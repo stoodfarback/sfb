@@ -32,7 +32,7 @@ class TestUtil < Minitest::Test
     assert_equal("4wpwq", Sfb::Util.random_string(prng: Random.new(111), len: 5, type: :base32))
     assert_equal("wpwqn", Sfb::Util.random_string(prng: Random.new(111), len: 5, type: :random_letters))
     assert_equal("zuuzo", Sfb::Util.random_string(prng: Random.new(111), len: 5, type: :pronounceable))
-    assert_raises(Sfb::Error) { Sfb::Util.random_string(type: :bad) }
+    assert_raises(ArgumentError) { Sfb::Util.random_string(type: :bad) }
     assert_equal("4wpwqn87", Sfb::Util.random_string(prng: Random.new(111), len: 5..10))
     assert_equal("4wpwqn87q9zdp2p", Sfb::Util.random_string(prng: Random.new(111), len: [5, 10, 15]))
   end

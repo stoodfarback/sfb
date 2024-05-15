@@ -1,14 +1,12 @@
 # frozen_string_literal: true
 
-require("sfb/version")
 require("sfb/outside_gems")
 require("sfb/core_ext")
-require("sfb/util")
-require("sfb/store")
-require("sfb/memo")
-require("sfb/kv")
-require("sfb/rate_limit")
 
 module Sfb
-  class Error < StandardError; end
+  autoload(:Util, "sfb/util")
+  autoload(:Store, "sfb/store")
+  autoload(:Memo, "sfb/memo")
+  autoload(:KV, "sfb/kv")
+  autoload(:RateLimit, "sfb/rate_limit")
 end

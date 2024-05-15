@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
-require_relative("lib/sfb/version")
-
 Gem::Specification.new do |spec|
   spec.name          = "sfb"
-  spec.version       = Sfb::VERSION
+  spec.version       = "0.1.0"
   spec.authors       = ["stoodfarback"]
   spec.email         = ["stoodfarback@gmail.com"]
 

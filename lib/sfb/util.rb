@@ -52,10 +52,7 @@ module Sfb::Util
     # output length is 32 characters by default
     # type can be :base32, :random_letters, :pronounceable
     def random_string(prng: nil, len: nil, type: :base32)
-      prng ||= begin
-        require("securerandom")
-        SecureRandom
-      end
+      prng ||= SecureRandom
       str = +""
       max_len = len.try(:max) || len.try(:to_i) || 32
       while str.length < max_len
@@ -68,7 +65,7 @@ module Sfb::Util
           when :pronounceable
             random_string_some_pronounceable(prng, max_len)
           else
-            raise(Sfb::Error, "Unknown type: #{type}")
+            raise(ArgumentError, "Unknown type: #{type}")
           end
         str << str_to_add
       end
@@ -117,7 +114,6 @@ module Sfb::Util
     end
 
     def http_common
-      require("http")
       HTTP.
         headers("User-Agent" => MOST_COMMON_USER_AGENT).
         use(:auto_inflate).
@@ -171,7 +167,6 @@ module Sfb::Util
     end
 
     def noko(html)
-      require("nokogiri")
       Nokogiri::HTML(html)
     end
 
