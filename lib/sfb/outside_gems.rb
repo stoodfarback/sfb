@@ -13,6 +13,6 @@ autoload(:JSON, "json")
 autoload(:Redis, "redis")
 autoload(:XXhash, "xxhash")
 autoload(:SecureRandom, "securerandom")
-module Base32; autoload :Crockford, 'base32/crockford'; end
+module Base32; autoload(:Crockford, "base32/crockford"); end
 autoload(:HTTP, "http")
 autoload(:Nokogiri, "nokogiri")
