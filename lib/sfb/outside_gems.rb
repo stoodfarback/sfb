@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
+require("active_support/core_ext/object/try")
+require("active_support/core_ext/object/blank")
+require("active_support/core_ext/string/access")
+require("json")
 require("pry")
 require("xxhash")
-require("active_support/all")
 require("base32/crockford")
-require("http")
-require("nokogiri")
 require("redis")
-require("minitest")

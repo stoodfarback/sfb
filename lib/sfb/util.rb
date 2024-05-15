@@ -51,7 +51,11 @@ module Sfb::Util
 
     # output length is 32 characters by default
     # type can be :base32, :random_letters, :pronounceable
-    def random_string(prng: SecureRandom, len: nil, type: :base32)
+    def random_string(prng: nil, len: nil, type: :base32)
+      prng ||= begin
+        require("securerandom")
+        SecureRandom
+      end
       str = +""
       max_len = len.try(:max) || len.try(:to_i) || 32
       while str.length < max_len
@@ -113,6 +117,7 @@ module Sfb::Util
     end
 
     def http_common
+      require("http")
       HTTP.
         headers("User-Agent" => MOST_COMMON_USER_AGENT).
         use(:auto_inflate).
@@ -166,6 +171,7 @@ module Sfb::Util
     end
 
     def noko(html)
+      require("nokogiri")
       Nokogiri::HTML(html)
     end
 
@@ -209,6 +215,7 @@ module Sfb::Util
 
     def rails_helpers
       $sfb_rails_helpers ||= begin
+        require("active_support/all")
         require("action_view/helpers")
         locale_path = Gem.loaded_specs["actionview"].full_gem_path + "/lib/action_view/locale/en.yml"
         ActiveSupport.on_load(:i18n) do
