@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
 
   spec.summary       = "My most commonly used gems & some misc utilities."
   spec.homepage      = "https://example.com"
-  spec.required_ruby_version = Gem::Requirement.new(">= 2.3.0")
+  spec.required_ruby_version = Gem::Requirement.new(">= 3.2.0")
 
   spec.metadata["allowed_push_host"] = "Set to 'http://mygemserver.com'"
 
