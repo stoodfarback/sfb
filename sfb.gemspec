@@ -29,7 +29,11 @@ Gem::Specification.new do |spec|
   spec.add_dependency("http")
   spec.add_dependency("nokogiri")
   spec.add_dependency("oj")
+
   spec.add_dependency("pry")
+  # pry bug: https://github.com/pry/pry/issues/2302
+  spec.add_dependency("readline-ext")
+
   spec.add_dependency("redis")
   spec.add_dependency("rubocop")
   spec.add_dependency("xxhash")
