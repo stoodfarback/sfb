@@ -10,6 +10,7 @@ require("active_support/core_ext/array/wrap")
 require("active_support/core_ext/string/starts_ends_with")
 require("active_support/core_ext/array/access")
 require("active_support/core_ext/module/delegation")
+require("active_support/core_ext/class/subclasses")
 
 autoload(:Base64, "base64")
 autoload(:JSON, "json")
