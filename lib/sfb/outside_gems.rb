@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require("tmpdir")
+require("json")
 
 require("active_support/core_ext/object/try")
 require("active_support/core_ext/object/blank")
@@ -15,7 +16,6 @@ require("active_support/core_ext/string/inflections")
 require("active_support/core_ext/string/access")
 
 autoload(:Base64, "base64")
-autoload(:JSON, "json")
 autoload(:Redis, "redis")
 autoload(:XXhash, "xxhash")
 autoload(:SecureRandom, "securerandom")
