@@ -15,6 +15,10 @@ require("active_support/core_ext/string/starts_ends_with")
 require("active_support/core_ext/string/inflections")
 require("active_support/core_ext/string/access")
 
+module ActiveSupport
+  autoload(:Duration, "active_support/duration")
+end
+
 autoload(:Base64, "base64")
 autoload(:Redis, "redis")
 autoload(:XXhash, "xxhash")
