@@ -26,3 +26,4 @@ autoload(:SecureRandom, "securerandom")
 module Base32; autoload(:Crockford, "base32/crockford"); end
 autoload(:HTTP, "http")
 autoload(:Nokogiri, "nokogiri")
+autoload(:MessagePack, "msgpack")
