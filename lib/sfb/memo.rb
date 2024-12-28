@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 module Sfb::Memo
+  NOT_SET = Module.new
+
   def memo(method_name)
     method_name = method_name.to_sym
 
@@ -29,60 +31,46 @@ module Sfb::Memo
     end
     ivar_name = "@#{method_name_base}#{punctuation_word}"
 
-    method_name_nomo = :"#{method_name_base}_nomo#{punctuation}"
-
-    workaround_for_super = false
-
-    if defined?(method_name_nomo) &&
-        method.super_method&.source_location&.first == my_source_location
-      source = method.try(:source)
-      if !source
-        workaround_for_super = true
-      else
-        if source.include?("super")
-          require("ripper")
-          workaround_for_super = Ripper.tokenize(source).include?("super")
-        end
-      end
-    end
-
-    if workaround_for_super
-
-      method_name_nomo_safe = nil
-      (1..99).each do |i|
-        maybe = :"#{method_name_base}_nomo_s#{i}#{punctuation}"
-        if !instance_methods.include?(maybe)
-          method_name_nomo_safe = maybe
-          break
-        end
-      end
-      raise("#memo internal error") if !method_name_nomo_safe
-
-      class_eval(<<~HEREDOC, __FILE__, __LINE__ + 1)
-        alias_method(:#{method_name_nomo_safe}, :#{method_name})
-        alias_method(:#{method_name}, :#{method_name_nomo})
-        def #{method_name}
-          if defined?(#{ivar_name})
-            #{ivar_name}
-          else
-            #{ivar_name} = #{method_name_nomo_safe}
-          end
+    # only prepend the generated module once per class instead of once per memo
+    $sfb_memo_lookup ||= {}
+    for_this_class = $sfb_memo_lookup[self] ||= begin
+      mod = Module.new
+      mod.set_temporary_name("Sfb::Memo(generated module)")
+      init_params = instance_method(:initialize).arity == 0 ? "" : "(...)"
+      mod.module_eval(<<~HEREDOC, __FILE__, __LINE__ + 1)
+        NOT_SET = ::Sfb::Memo::NOT_SET
+        def initialize#{init_params}
+          init_memo_ivars
+          super
         end
       HEREDOC
-
-      return(method_name)
+      self.prepend(mod)
+      ivars = []
+      { mod:, ivars: }
     end
+    for_this_class => { mod:, ivars: }
 
-    class_eval(<<~HEREDOC, __FILE__, __LINE__ + 1)
-      alias_method(:#{method_name_nomo}, :#{method_name})
+    ivars << ivar_name
+
+    mod.module_eval(<<~HEREDOC, __FILE__, __LINE__ + 1)
       def #{method_name}
-        if defined?(#{ivar_name})
+        if #{ivar_name} != NOT_SET
           #{ivar_name}
         else
-          #{ivar_name} = #{method_name_nomo}
+          #{ivar_name} = super
         end
       end
     HEREDOC
+
+    if mod.method_defined?(:init_memo_ivars)
+      mod.remove_method(:init_memo_ivars)
+    end
+    mod.module_eval(<<~HEREDOC, __FILE__, __LINE__ + 1)
+      def init_memo_ivars
+        #{ivars.map { "#{_1} = NOT_SET" }.join("\n") }
+      end
+    HEREDOC
+
     method_name
   end
 end
