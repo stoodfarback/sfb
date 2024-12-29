@@ -79,7 +79,7 @@ GEM
     msgpack (1.7.5)
     nokogiri (1.18.0-x86_64-linux-gnu)
       racc (~> 1.4)
-    oj (3.16.8)
+    oj (3.16.9)
       bigdecimal (>= 3.0)
       ostruct (>= 0.2)
     ostruct (0.6.1)
