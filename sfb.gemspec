@@ -41,6 +41,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency("rubocop")
   spec.add_dependency("xxhash")
   spec.add_dependency("msgpack")
+  spec.add_dependency("pstore")
 
   spec.add_dependency("minitest")
 end

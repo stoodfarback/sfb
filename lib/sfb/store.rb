@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require("yaml/store")
-
 class Sfb::Store
   # a wrapper for YAML::Store with implicit transactions and caching
 
