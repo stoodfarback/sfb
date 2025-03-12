@@ -30,3 +30,4 @@ autoload(:MessagePack, "msgpack")
 autoload(:YAML, "yaml")
 module YAML; autoload(:Store, "yaml/store"); end
 autoload(:PStore, "pstore")
+autoload(:Open3, "open3")
