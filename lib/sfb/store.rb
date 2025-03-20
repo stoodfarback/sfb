@@ -5,7 +5,10 @@ class Sfb::Store
 
   def initialize(file_path)
     @store = YAML::Store.new(file_path, thread_safe = true)
-    @store.ultra_safe = true
+
+    # bug in pstore 0.2.0, ractor error with this enabled
+    # @store.ultra_safe = true
+
     @cache = {}
   end
 
