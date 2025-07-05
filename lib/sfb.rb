@@ -9,4 +9,5 @@ module Sfb
   autoload(:Memo, "sfb/memo")
   autoload(:KV, "sfb/kv")
   autoload(:RateLimit, "sfb/rate_limit")
+  autoload(:LexConstShadow, "sfb/lex_const_shadow")
 end
