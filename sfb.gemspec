@@ -44,7 +44,4 @@ Gem::Specification.new do |spec|
   spec.add_dependency("pstore")
 
   spec.add_dependency("minitest")
-
-  # needs to be explicit for a while to fix compatibility issue with openssl on arch linux
-  spec.add_dependency("openssl")
 end

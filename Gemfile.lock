@@ -10,7 +10,6 @@ PATH
       msgpack
       nokogiri
       oj
-      openssl
       pry
       pstore
       redis
@@ -82,7 +81,6 @@ GEM
     oj (3.16.11)
       bigdecimal (>= 3.0)
       ostruct (>= 0.2)
-    openssl (3.3.1)
     ostruct (0.6.3)
     parallel (1.27.0)
     parser (3.3.9.0)
@@ -143,4 +141,4 @@ DEPENDENCIES
   sfb!
 
 BUNDLED WITH
-   2.6.2
+   2.6.9
