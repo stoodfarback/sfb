@@ -44,4 +44,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency("pstore")
 
   spec.add_dependency("minitest")
+
+  # tmp explicit dependency on openssl to fix openssl compat issue
+  spec.add_dependency("openssl")
 end
