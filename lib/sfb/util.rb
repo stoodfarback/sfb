@@ -170,42 +170,47 @@ module Sfb::Util
       Nokogiri::HTML(html)
     end
 
-    def redis_exists?(key)
-      $redis.exists?(key)
+    def redis
+      $redis ||= Redis.new
     end
 
-    def redis_get(key)
-      if (t = $redis.get(key)).present?
+    def redis_exists?(key, redis: self.redis)
+      redis.exists?(key)
+    end
+
+    def redis_get(key, redis: self.redis)
+      if (t = redis.get(key)).present?
         JSON.parse(t)
       end
     end
 
-    def redis_set(key, val, **)
-      $redis.set(key, val.to_json, **)
+    def redis_set(key, val, redis: self.redis, **)
+      redis.set(key, val.to_json, **)
       val
     end
 
-    def redis_fetch(key, **kwargs, &blk)
-      if (r = $redis.get(key)).present?
+    def redis_fetch(key, redis: self.redis, **kwargs, &blk)
+      if (r = redis.get(key)).present?
         return(JSON.parse(r))
       end
 
       blk.().tap do |r|
-        $redis.set(key, r.to_json, **kwargs)
+        redis.set(key, r.to_json, **kwargs)
       end
     end
 
-    def redis_delete(key)
-      $redis.del(key)
+    def redis_delete(key, redis: self.redis)
+      redis.del(key)
     end
 
-    def redis_expire(key, seconds)
-      $redis.expire(key, seconds.to_f.round)
+    def redis_expire(key, seconds, redis: self.redis)
+      redis.expire(key, seconds.to_f.round)
     end
 
-    def redis_delete_all_with_prefix(prefix)
-      keys = $redis.keys(prefix + "*")
-      $redis.del(keys)
+    def redis_delete_all_with_prefix(prefix, redis: self.redis)
+      keys = redis.keys(prefix + "*")
+      return if keys.empty?
+      redis.del(keys)
     end
 
     def rails_helpers
