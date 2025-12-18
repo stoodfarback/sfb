@@ -1,0 +1,8 @@
+#!/usr/bin/env zsh
+
+source $HOME/.rvm/scripts/rvm
+
+script=`realpath $0`
+app_dir=${script:a:h:h}
+cd $app_dir
+exec bundle exec ruby -Ilib -rsfb -e 'Sfb::TestRunner.run(file_pattern: "test/test_*.rb")' -- "$@"

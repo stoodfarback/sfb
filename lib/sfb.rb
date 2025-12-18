@@ -10,4 +10,5 @@ module Sfb
   autoload(:KV, "sfb/kv")
   autoload(:RateLimit, "sfb/rate_limit")
   autoload(:LexConstShadow, "sfb/lex_const_shadow")
+  autoload(:TestRunner, "sfb/test_runner")
 end
