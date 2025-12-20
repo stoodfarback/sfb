@@ -9,9 +9,14 @@ module Sfb
       # Prevent autorun from installing at_exit hook if we're in list mode
       Minitest.class_variable_set(:@@installed_at_exit, true) if list_only
 
-      # Load all test files
+      # Load all test files, tracking which file defines each class
       test_files = Dir[file_pattern]
-      test_files.each { |f| require File.expand_path(f) }
+      class_to_file = {}
+      test_files.each do |f|
+        before = Minitest::Runnable.runnables.dup
+        require File.expand_path(f)
+        (Minitest::Runnable.runnables - before).each { |klass| class_to_file[klass] = f }
+      end
 
       # Initialize Minitest so runnable_methods works
       Minitest.seed = Random.new_seed
@@ -20,15 +25,15 @@ module Sfb
       all_tests = []
       Minitest::Runnable.runnables.each do |klass|
         klass.runnable_methods.each do |method|
-          all_tests << [klass, method]
+          all_tests << [klass, method, class_to_file[klass]]
         end
       end
 
-      # Filter tests if patterns provided
+      # Filter tests if patterns provided - match against file, class, or method
       if patterns.any?
-        all_tests = all_tests.select do |klass, method|
-          search_str = "#{klass}##{method}".downcase
-          patterns.any? { |p| search_str.include?(p) }
+        all_tests = all_tests.select do |klass, method, file|
+          search_str = "#{file} #{klass}##{method}".downcase
+          patterns.all? { |p| search_str.include?(p) }
         end
       end
 
@@ -44,14 +49,14 @@ module Sfb
         puts("#{all_tests.size} test(s) in #{by_class.size} class(es):")
         by_class.each do |klass, tests|
           puts("  #{klass}")
-          tests.each { |_, method| puts("    #{method}") }
+          tests.each { |_, method, _| puts("    #{method}") }
         end
         puts
         exit(0)
       end
 
       # Remove unmatched test methods before autorun kicks in
-      matched_methods_by_class = by_class.transform_values { |tests| tests.map(&:last) }
+      matched_methods_by_class = by_class.transform_values { |tests| tests.map { |_, method, _| method } }
 
       Minitest::Runnable.runnables.each do |klass|
         matched = matched_methods_by_class[klass] || []
