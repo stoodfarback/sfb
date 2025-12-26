@@ -13,7 +13,7 @@ module Sfb
     class ProtocolError < Error; end
     class InvalidRequest < Error; end
 
-    attr_accessor(:project_id, :project_name)
+    attr_accessor(:project_id, :project_name, :cache)
 
     def initialize(project_id:, project_name:)
       validate_id!(project_id, "project_id")
@@ -21,10 +21,13 @@ module Sfb
 
       self.project_id = project_id
       self.project_name = project_name
+      self.cache = {}
     end
 
     def fetch(secret_name)
       validate_id!(secret_name, "secret_name")
+
+      return cache[secret_name] if cache.key?(secret_name)
 
       request = {
         "project_id" => project_id,
@@ -38,7 +41,9 @@ module Sfb
       if resp["ok"] == true
         b64 = resp["value_b64"]
         raise(ProtocolError, "Missing value_b64") unless b64.is_a?(String)
-        Base64.strict_decode64(b64)
+        value = Base64.strict_decode64(b64)
+        cache[secret_name] = value
+        value
       else
         raise(Denied, "denied")
       end

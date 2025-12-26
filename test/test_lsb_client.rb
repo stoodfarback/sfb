@@ -77,6 +77,39 @@ class TestLsbClient < Minitest::Test
     end
   end
 
+  def test_fetch_caches_success
+    project_name = "sfb"
+    project_id = "nzsdzv5zd7r5kcf8prbxyhzics10fm92rp07gbyu5mktyfzv49"
+    client = Sfb::LsbClient.new(project_id:, project_name:)
+
+    calls = 0
+    payload = Base64.strict_encode64("secret")
+    client.define_singleton_method(:exchange) do |_request|
+      calls += 1
+      "{\"ok\":true,\"value_b64\":\"#{payload}\"}\n"
+    end
+
+    assert_equal("secret", client.fetch("token"))
+    assert_equal("secret", client.fetch("token"))
+    assert_equal(1, calls)
+  end
+
+  def test_fetch_does_not_cache_denied
+    project_name = "sfb"
+    project_id = "nzsdzv5zd7r5kcf8prbxyhzics10fm92rp07gbyu5mktyfzv49"
+    client = Sfb::LsbClient.new(project_id:, project_name:)
+
+    calls = 0
+    client.define_singleton_method(:exchange) do |_request|
+      calls += 1
+      "{\"ok\":false}\n"
+    end
+
+    assert_raises(Sfb::LsbClient::Denied) { client.fetch("token") }
+    assert_raises(Sfb::LsbClient::Denied) { client.fetch("token") }
+    assert_equal(2, calls)
+  end
+
   def test_exchange_helper_response_too_large
     with_unix_server do |socket_path, server|
       thread = Thread.new do
