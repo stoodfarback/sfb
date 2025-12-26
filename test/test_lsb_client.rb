@@ -3,6 +3,10 @@
 require_relative("test_helper")
 
 class TestLsbClient < Minitest::Test
+  def teardown
+    Sfb::LsbClient.instance_variable_set(:@singleton, nil)
+  end
+
   def test_basic
     project_name = "sfb"
     project_id = "nzsdzv5zd7r5kcf8prbxyhzics10fm92rp07gbyu5mktyfzv49"
@@ -108,6 +112,31 @@ class TestLsbClient < Minitest::Test
     assert_raises(Sfb::LsbClient::Denied) { client.fetch("token") }
     assert_raises(Sfb::LsbClient::Denied) { client.fetch("token") }
     assert_equal(2, calls)
+  end
+
+  def test_singleton_fetch_requires_init
+    error = assert_raises(Sfb::LsbClient::Error) do
+      Sfb::LsbClient.fetch("token")
+    end
+
+    assert_match(/not initialized/, error.message)
+  end
+
+  def test_singleton_init_and_fetch
+    project_name = "sfb"
+    project_id = "nzsdzv5zd7r5kcf8prbxyhzics10fm92rp07gbyu5mktyfzv49"
+    client = Sfb::LsbClient.init!(project_name, project_id)
+
+    calls = 0
+    payload = Base64.strict_encode64("secret")
+    client.define_singleton_method(:exchange) do |_request|
+      calls += 1
+      "{\"ok\":true,\"value_b64\":\"#{payload}\"}\n"
+    end
+
+    assert_equal("secret", Sfb::LsbClient.fetch("token"))
+    assert_equal("secret", Sfb::LsbClient.fetch("token"))
+    assert_equal(1, calls)
   end
 
   def test_exchange_helper_response_too_large

@@ -15,6 +15,16 @@ module Sfb
 
     attr_accessor(:project_id, :project_name, :cache)
 
+    def self.init!(project_name, project_id)
+      @singleton = new(project_id:, project_name:)
+    end
+
+    def self.fetch(secret_name)
+      instance = @singleton
+      raise(Error, "LsbClient not initialized") unless instance
+      instance.fetch(secret_name)
+    end
+
     def initialize(project_id:, project_name:)
       validate_id!(project_id, "project_id")
       validate_id!(project_name, "project_name")
