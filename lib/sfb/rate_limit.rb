@@ -29,7 +29,7 @@ module Sfb::RateLimit
   end
 
   def self.sleep_till_next(*names, quiet: false)
-    parts = names.map { send("left_till_#{_1}") }
+    parts = names.map { send("left_till_#{it}") }
     to_sleep = parts.min
     if to_sleep < 0
       to_sleep = 0

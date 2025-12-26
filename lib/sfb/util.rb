@@ -189,13 +189,13 @@ module Sfb::Util
       val
     end
 
-    def redis_fetch(key, redis: self.redis, **kwargs, &blk)
+    def redis_fetch(key, redis: self.redis, **, &blk)
       if (r = redis.get(key)).present?
         return(JSON.parse(r))
       end
 
       blk.().tap do |r|
-        redis.set(key, r.to_json, **kwargs)
+        redis.set(key, r.to_json, **)
       end
     end
 

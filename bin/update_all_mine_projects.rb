@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 projects_dir = File.expand_path("../..", __dir__)
 
@@ -9,10 +10,10 @@ Dir.children(projects_dir).sort.each do |name|
   next unless File.exist?(File.join(project_path, "Gemfile.lock"))
 
   Dir.chdir(project_path) do
-    puts "\n=== #{name} ==="
+    puts("\n=== #{name} ===")
 
     has_origin = system("git remote get-url origin >/dev/null 2>&1")
-    clean = `git status --porcelain`.strip.empty?
+    clean = %x(git status --porcelain).strip.empty?
 
     if has_origin && clean
       system("git push")
@@ -21,7 +22,7 @@ Dir.children(projects_dir).sort.each do |name|
 
     system("bundle update --conservative sfb")
 
-    status = `git status --porcelain`.strip
+    status = %x(git status --porcelain).strip
     only_lockfile_changed = (status == "M Gemfile.lock" || status == " M Gemfile.lock")
 
     if only_lockfile_changed
@@ -30,7 +31,7 @@ Dir.children(projects_dir).sort.each do |name|
     end
 
     has_origin = system("git remote get-url origin >/dev/null 2>&1")
-    clean = `git status --porcelain`.strip.empty?
+    clean = %x(git status --porcelain).strip.empty?
 
     if has_origin && clean
       system("git push")

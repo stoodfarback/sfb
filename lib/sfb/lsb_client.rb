@@ -2,7 +2,7 @@
 
 module Sfb
   class LsbClient
-    SOCKET_PATH = "/run/user/#{Process.uid}/lsb.sock"
+    SOCKET_PATH = "/run/user/#{Process.uid}/lsb.sock".freeze
     MAX_LINE_BYTES = 16 * 1024
     RESPONSE_TIMEOUT_SECONDS = 2
     ID_RE = /\A[a-z0-9]{1,50}\z/
@@ -32,7 +32,7 @@ module Sfb
       request = {
         "project_id" => project_id,
         "project_name" => project_name,
-        "secret_name" => secret_name
+        "secret_name" => secret_name,
       }
 
       line = exchange("#{JSON.generate(request)}\n")
@@ -76,7 +76,7 @@ module Sfb
       attr_accessor(:payload, :socket_path, :max_line_bytes, :deadline, :sock)
 
       def self.exchange(...)
-        new(...).call
+        new(...).()
       end
 
       def initialize(payload:, socket_path:, max_line_bytes:, timeout_seconds:)
@@ -165,9 +165,9 @@ module Sfb
         remaining = self.class.remaining_seconds(deadline)
         raise(ProtocolError, "Timed out #{context}") if remaining <= 0
         ready = if direction == :readable
-          IO.select([sock], nil, nil, remaining)
+          sock.wait_readable(remaining)
         else
-          IO.select(nil, [sock], nil, remaining)
+          sock.wait_writable(remaining)
         end
         raise(ProtocolError, "Timed out #{context}") if ready.nil?
       end

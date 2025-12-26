@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
     end
   end
   spec.bindir = "exe"
-  spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
+  spec.executables = spec.files.grep(%r{\Aexe/}) {|f| File.basename(f) }
   spec.require_paths = ["lib"]
 
   spec.add_dependency("actionview")
@@ -34,14 +34,14 @@ Gem::Specification.new do |spec|
   spec.add_dependency("nokogiri")
   spec.add_dependency("oj")
 
-  spec.add_dependency("reline")
   spec.add_dependency("pry")
+  spec.add_dependency("reline")
 
+  spec.add_dependency("msgpack")
+  spec.add_dependency("pstore")
   spec.add_dependency("redis")
   spec.add_dependency("rubocop")
   spec.add_dependency("xxhash")
-  spec.add_dependency("msgpack")
-  spec.add_dependency("pstore")
 
   spec.add_dependency("minitest")
 

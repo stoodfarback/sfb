@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # active_support/core_ext/numeric/time.rb
 # active_support/core_ext/integer/time.rb
 # but only these helpers, without pulling in a bunch of other (slower) parts
@@ -5,35 +7,35 @@ class Numeric
   def seconds
     ActiveSupport::Duration.seconds(self)
   end
-  alias :second :seconds
+  alias_method(:second, :seconds)
 
   def minutes
     ActiveSupport::Duration.minutes(self)
   end
-  alias :minute :minutes
+  alias_method(:minute, :minutes)
 
   def hours
     ActiveSupport::Duration.hours(self)
   end
-  alias :hour :hours
+  alias_method(:hour, :hours)
 
   def days
     ActiveSupport::Duration.days(self)
   end
-  alias :day :days
+  alias_method(:day, :days)
 
   def weeks
     ActiveSupport::Duration.weeks(self)
   end
-  alias :week :weeks
+  alias_method(:week, :weeks)
 
   def months
     ActiveSupport::Duration.months(self)
   end
-  alias :month :months
+  alias_method(:month, :months)
 
   def years
     ActiveSupport::Duration.years(self)
   end
-  alias :year :years
+  alias_method(:year, :years)
 end

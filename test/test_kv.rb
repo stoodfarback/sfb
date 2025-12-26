@@ -36,7 +36,7 @@ class TestKV < Minitest::Test
   end
 
   def test_delete_all_with_prefix
-    %w[foo:one foo:two bar:three].each { KV.delete(_1) }
+    %w[foo:one foo:two bar:three].each { KV.delete(it) }
     KV.set("foo:one", 1)
     KV.set("foo:two", 2)
     KV.set("bar:three", 3)
@@ -89,7 +89,7 @@ class TestKV < Minitest::Test
       obj.kv_set("a:three", 3)
     end
     get_values = -> do
-      %w[a:one b:two a:three].map { obj.kv_get(_1) }
+      %w[a:one b:two a:three].map { obj.kv_get(it) }
     end
     set_values.()
     assert_equal([1, 2, 3], get_values.())

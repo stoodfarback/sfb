@@ -64,7 +64,7 @@ class TestLsbClient < Minitest::Test
         client&.close
       end
 
-      payload = "a" * 65_536 + "\n"
+      payload = ("a" * 65_536) + "\n"
       line = Sfb::LsbClient::ExchangeHelper.exchange(
         payload:,
         socket_path:,

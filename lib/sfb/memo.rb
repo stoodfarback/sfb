@@ -4,7 +4,7 @@ module Sfb::Memo
   def memo(method_name)
     method_name = method_name.to_sym
 
-    if !instance_methods.include?(method_name)
+    if !method_defined?(method_name)
       raise(NoMethodError, "#memo expected '#{method_name}' to be an instance method of #{self}")
     end
 
