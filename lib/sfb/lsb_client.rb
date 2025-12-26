@@ -5,7 +5,7 @@ module Sfb
     SOCKET_PATH = "/run/user/#{Process.uid}/lsb.sock".freeze
     MAX_LINE_BYTES = 16 * 1024
     RESPONSE_TIMEOUT_SECONDS = 2
-    ID_RE = /\A[a-z0-9]{1,50}\z/
+    ID_RE = /\A[a-z0-9_-]{1,50}\z/
 
     class Error < StandardError; end
     class BrokerDown < Error; end

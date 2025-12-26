@@ -10,8 +10,9 @@ class TestLsbClient < Minitest::Test
   def test_basic
     project_name = "sfb"
     project_id = "nzsdzv5zd7r5kcf8prbxyhzics10fm92rp07gbyu5mktyfzv49"
-    client = Sfb::LsbClient.new(project_id:, project_name:)
-    assert_equal("pong", client.fetch("ping"))
+    Sfb::LsbClient.init!(project_name, project_id)
+    assert_equal("pong", Sfb::LsbClient.fetch("ping"))
+    assert_equal("hey!", Sfb::LsbClient.fetch("hello_world"))
   end
 
   def test_exchange_helper_success
