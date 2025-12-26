@@ -31,4 +31,5 @@ autoload(:YAML, "yaml")
 module YAML; autoload(:Store, "yaml/store"); end
 autoload(:PStore, "pstore")
 autoload(:Open3, "open3")
+autoload(:Socket, "socket")
 autoload(:UNIXSocket, "socket")
