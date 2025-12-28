@@ -41,6 +41,16 @@ module Sfb
 
       if all_tests.empty?
         puts("No tests matched: #{patterns.join(", ")}")
+        puts
+        puts("Usage: ruby test/run.rb [options] [pattern ...]")
+        puts("  Patterns filter by file path, class name, or method name (case-insensitive)")
+        puts("  Multiple patterns use AND logic (all must match)")
+        puts("  -l, --list  List matching tests without running them")
+        puts
+        puts("Examples:")
+        puts("  ruby test/run.rb session       # run tests with 'session' in file/class/method")
+        puts("  ruby test/run.rb session basic # run tests matching both 'session' AND 'basic'")
+        puts("  ruby test/run.rb -l            # list all tests")
         exit(1)
       end
 
