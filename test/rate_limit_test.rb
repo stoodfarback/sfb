@@ -10,8 +10,9 @@ class RateLimitTest < Minitest::Test
   def test_basic
     assert(RateLimit.one)
     refute(RateLimit.one)
-    assert(RateLimit.left_till_one > 0.0)
-    assert(RateLimit.left_till_one < 0.2)
+    val = RateLimit.left_till_one
+    assert(val > 0.0, "Expected > 0.0 but got #{val}")
+    assert(val <= 0.2, "Expected <= 0.2 but got #{val}")
 
     assert(RateLimit.left_till_two < 0.01)
     assert(RateLimit.two)
