@@ -4,7 +4,25 @@ module Sfb
   class TestRunner
     def self.run(file_pattern: "test/**/*_test.rb")
       list_only = ARGV.delete("-l") || ARGV.delete("--list")
-      patterns = ARGV.map(&:downcase)
+
+      # Separate minitest options from filter patterns
+      minitest_args = []
+      patterns = []
+      i = 0
+      while i < ARGV.size
+        arg = ARGV[i]
+        if arg.start_with?("-")
+          minitest_args << arg
+          # Capture option value if present
+          if i + 1 < ARGV.size && !ARGV[i + 1].start_with?("-")
+            i += 1
+            minitest_args << ARGV[i]
+          end
+        else
+          patterns << arg.downcase
+        end
+        i += 1
+      end
 
       require("minitest")
 
@@ -80,6 +98,9 @@ module Sfb
 
       # Remove classes with no matched tests
       Minitest::Runnable.runnables.reject! {|klass| !matched_methods_by_class.key?(klass) }
+
+      # Pass minitest args through for autorun to process
+      ARGV.replace(minitest_args)
     end
   end
 end

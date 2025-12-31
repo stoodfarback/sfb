@@ -1,0 +1,6 @@
+#!/usr/bin/env zsh
+
+script=`realpath $0`
+app_dir=${script:a:h:h}
+cd $app_dir
+exec bundle exec ruby -r./boot -e 'Sfb::TestRunner.run' -- "$@"
