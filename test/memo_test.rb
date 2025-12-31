@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestMemo < Minitest::Test
+class MemoTest < Minitest::Test
   class Mem1
     extend(Sfb::Memo)
 

@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestLexConstShadow < Minitest::Test
+class LexConstShadowTest < Minitest::Test
   # preload so we can safely remove_const in teardown
   Sfb::LexConstShadow.name
 

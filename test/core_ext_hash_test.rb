@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestCoreExtHash < Minitest::Test
+class CoreExtHashTest < Minitest::Test
   def test_same_keys
     assert({}.same_keys?({}))
     assert({ a: 1 }.same_keys?({ a: 1 }))

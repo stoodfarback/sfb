@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestUtil < Minitest::Test
+class UtilTest < Minitest::Test
   def test_including
     t = Module.new do
       include(Sfb::Util)

@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestStore < Minitest::Test
+class StoreTest < Minitest::Test
   def test_basic
     path = File.expand_path(File.join(__dir__, "..", "tmp", "test_store_basic.yml"))
     if File.exist?(path)

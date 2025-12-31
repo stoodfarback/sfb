@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestRateLimit < Minitest::Test
+class RateLimitTest < Minitest::Test
   RateLimit = Sfb::RateLimit
   RateLimit.def_limit(:one, 0.1..0.2)
   RateLimit.def_limit(:two, 0.1..0.2)

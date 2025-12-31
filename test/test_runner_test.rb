@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestTestRunner < Minitest::Test
+class TestRunnerTest < Minitest::Test
   FIXTURE_DIR = File.expand_path("fixture/dummy_project", __dir__)
 
   def run_fixture(*args)
@@ -30,8 +30,8 @@ class TestTestRunner < Minitest::Test
   def test_verbose_flag
     output, status = run_fixture("--verbose")
     assert(status.success?)
-    assert_match(/TestAlpha#test_one/, output)
-    assert_match(/TestBeta#test_first/, output)
+    assert_match(/AlphaTest#test_one/, output)
+    assert_match(/BetaTest#test_first/, output)
   end
 
   def test_seed_flag
@@ -44,7 +44,7 @@ class TestTestRunner < Minitest::Test
     output, status = run_fixture("--list")
     assert(status.success?)
     assert_match(/4 test\(s\)/, output)
-    assert_match(/TestAlpha/, output)
+    assert_match(/AlphaTest/, output)
     assert_match(/test_one/, output)
     refute_match(/runs/, output)
   end
@@ -52,8 +52,8 @@ class TestTestRunner < Minitest::Test
   def test_pattern_with_verbose
     output, status = run_fixture("alpha", "--verbose")
     assert(status.success?)
-    assert_match(/TestAlpha#test_one/, output)
-    refute_match(/TestBeta/, output)
+    assert_match(/AlphaTest#test_one/, output)
+    refute_match(/BetaTest/, output)
     assert_match(/2 runs/, output)
   end
 

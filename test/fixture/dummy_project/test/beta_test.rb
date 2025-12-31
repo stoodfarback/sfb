@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestBeta < Minitest::Test
+class BetaTest < Minitest::Test
   def test_first
     assert(true)
   end

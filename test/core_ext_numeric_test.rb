@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestCoreExtNumeric < Minitest::Test
+class CoreExtNumericTest < Minitest::Test
   def test_time
     assert_equal(1, 1.second.to_i)
     assert_equal(2, 2.seconds.to_i)

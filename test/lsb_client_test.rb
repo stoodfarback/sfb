@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestLsbClient < Minitest::Test
+class LsbClientTest < Minitest::Test
   def teardown
     Sfb::LsbClient.instance_variable_set(:@singleton, nil)
   end

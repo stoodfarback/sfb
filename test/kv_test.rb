@@ -2,7 +2,7 @@
 
 require_relative("test_helper")
 
-class TestKV < Minitest::Test
+class KVTest < Minitest::Test
   KV = Sfb::KV
 
   def test_basic
