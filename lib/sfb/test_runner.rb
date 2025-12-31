@@ -4,6 +4,7 @@ module Sfb
   class TestRunner
     def self.run(file_pattern: "test/**/*_test.rb")
       list_only = ARGV.delete("-l") || ARGV.delete("--list")
+      match_any = ARGV.delete("--match-any")
 
       # Separate minitest options from filter patterns
       minitest_args = []
@@ -42,33 +43,53 @@ module Sfb
       Minitest.seed = Random.new_seed
 
       # Find all test classes and their test methods
-      all_tests = []
+      available_tests = []
       Minitest::Runnable.runnables.each do |klass|
         klass.runnable_methods.each do |method|
-          all_tests << [klass, method, class_to_file[klass]]
+          available_tests << [klass, method, class_to_file[klass]]
         end
       end
+      available_tests.sort_by! {|klass, method, file| [file.to_s, klass.to_s, method.to_s] }
 
       # Filter tests if patterns provided - match against file, class, or method
-      if patterns.any?
-        all_tests = all_tests.select do |klass, method, file|
+      all_tests = if patterns.any?
+        available_tests.select do |klass, method, file|
           search_str = "#{file} #{klass}##{method}".downcase
-          patterns.all? {|p| search_str.include?(p) }
+          if match_any
+            patterns.any? {|p| search_str.include?(p) }
+          else
+            patterns.all? {|p| search_str.include?(p) }
+          end
         end
+      else
+        available_tests
       end
 
       if all_tests.empty?
         puts("No tests matched: #{patterns.join(", ")}")
         puts
-        puts("Usage: ruby test/run.rb [options] [pattern ...]")
+        if patterns.size > 1 && !match_any
+          puts("Tip: Consider using --match-any to switch from AND to OR matching")
+          puts
+        end
+        if available_tests.any?
+          puts("Available tests (first 3):")
+          available_tests.first(3).each do |klass, method, file|
+            puts("  #{file} #{klass}##{method}")
+          end
+          puts
+        end
+        puts("Usage: bin/test [options] [pattern ...]")
         puts("  Patterns filter by file path, class name, or method name (case-insensitive)")
         puts("  Multiple patterns use AND logic (all must match)")
+        puts("  --match-any  Switch to OR logic for multiple patterns")
         puts("  -l, --list  List matching tests without running them")
         puts
         puts("Examples:")
-        puts("  ruby test/run.rb session       # run tests with 'session' in file/class/method")
-        puts("  ruby test/run.rb session basic # run tests matching both 'session' AND 'basic'")
-        puts("  ruby test/run.rb -l            # list all tests")
+        puts("  bin/test session       # run tests with 'session' in file/class/method")
+        puts("  bin/test session basic # run tests matching both 'session' AND 'basic'")
+        puts("  bin/test --match-any test/util_test.rb test/kv_test.rb # run tests in either file")
+        puts("  bin/test -l            # list all tests")
         exit(1)
       end
 
