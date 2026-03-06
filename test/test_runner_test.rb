@@ -66,22 +66,23 @@ class TestRunnerTest < Minitest::Test
     assert_match(/Usage: bin\/test/, output)
   end
 
-  def test_no_match_multiple_patterns_tip
-    output, status = run_fixture("alpha", "beta")
-    refute(status.success?)
-    assert_match(/Tip: Consider using --match-any to switch from AND to OR matching/, output)
-  end
-
-  def test_match_any
+  def test_multiple_patterns_default_or
     # 'alpha' matches 2 tests, 'beta' matches 2 tests. Total 4.
-    output, status = run_fixture("--match-any", "alpha", "beta")
+    output, status = run_fixture("alpha", "beta")
     assert(status.success?)
     assert_match(/4 runs/, output)
   end
 
-  def test_match_any_list
-    output, status = run_fixture("--match-any", "--list", "alpha", "beta")
+  def test_match_all
+    # 'alpha' AND 'one' should match only AlphaTest#test_one
+    output, status = run_fixture("--match-all", "alpha", "one")
     assert(status.success?)
-    assert_match(/4 test\(s\)/, output)
+    assert_match(/1 runs/, output)
+  end
+
+  def test_match_all_list
+    output, status = run_fixture("--match-all", "--list", "alpha", "one")
+    assert(status.success?)
+    assert_match(/1 test\(s\)/, output)
   end
 end
