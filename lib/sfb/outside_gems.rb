@@ -3,6 +3,8 @@
 require("tmpdir")
 require("json")
 
+require("sfb/msgpack_init")
+
 require("active_support/core_ext/object/try")
 require("active_support/core_ext/object/blank")
 require("active_support/core_ext/module/delegation")
@@ -26,7 +28,6 @@ autoload(:SecureRandom, "securerandom")
 module Base32; autoload(:Crockford, "base32/crockford"); end
 autoload(:HTTP, "http")
 autoload(:Nokogiri, "nokogiri")
-autoload(:MessagePack, "msgpack")
 autoload(:YAML, "yaml")
 module YAML; autoload(:Store, "yaml/store"); end
 autoload(:PStore, "pstore")
