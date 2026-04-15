@@ -2,3 +2,5 @@
 
 require_relative("../lib/sfb")
 require("minitest/autorun")
+
+Sfb::Test::Snapshot.setup!

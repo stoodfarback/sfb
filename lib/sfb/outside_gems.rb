@@ -7,6 +7,7 @@ require("sfb/msgpack_init")
 
 require("active_support/core_ext/object/try")
 require("active_support/core_ext/object/blank")
+require("active_support/core_ext/object/deep_dup")
 require("active_support/core_ext/module/delegation")
 require("active_support/core_ext/class/subclasses")
 require("active_support/core_ext/enumerable")
