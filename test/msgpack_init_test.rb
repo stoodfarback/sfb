@@ -42,12 +42,12 @@ class MsgpackInitTest < Minitest::Test
     RUBY
 
     assert_equal(true, data.fetch("msgpack_loaded"))
-    assert_equal(["Symbol", "ok"], data.fetch("symbol"))
+    assert_equal(%w[Symbol ok], data.fetch("symbol"))
     assert_equal("String", data.fetch("module_name"))
-    assert_equal(["Date", "2024-01-02"], data.fetch("date"))
+    assert_equal(%w[Date 2024-01-02], data.fetch("date"))
     assert_equal(["DateTime", "2024-01-02T03:04:05+00:00"], data.fetch("datetime"))
     assert_equal(["Time", "Tue, 02 Jan 2024 03:04:05 +0000"], data.fetch("time"))
-    assert_equal(["String", "MsgpackInitAutoInstallAfterSfb"], data.fetch("missing"))
+    assert_equal(%w[String MsgpackInitAutoInstallAfterSfb], data.fetch("missing"))
   end
 
   def test_installs_when_msgpack_loads_before_sfb
@@ -65,8 +65,8 @@ class MsgpackInitTest < Minitest::Test
       ))
     RUBY
 
-    assert_equal(["String", "ok"], data.fetch("before"))
-    assert_equal(["Symbol", "ok"], data.fetch("after"))
+    assert_equal(%w[String ok], data.fetch("before"))
+    assert_equal(%w[Symbol ok], data.fetch("after"))
   end
 
   def test_overwrites_existing_registration
@@ -93,7 +93,7 @@ class MsgpackInitTest < Minitest::Test
     RUBY
 
     assert_equal(["String", "custom:ok"], data.fetch("preserved"))
-    assert_equal(["Symbol", "ok"], data.fetch("after"))
+    assert_equal(%w[Symbol ok], data.fetch("after"))
   end
 
   def test_backwards_compatible_with_previous_symbol_and_module_wire_formats
@@ -140,7 +140,7 @@ class MsgpackInitTest < Minitest::Test
 
     assert_equal(data.fetch("packed_symbol_old"), data.fetch("packed_symbol_new"))
     assert_equal(data.fetch("packed_module_old"), data.fetch("packed_module_new"))
-    assert_equal(["Symbol", "ok"], data.fetch("symbol"))
+    assert_equal(%w[Symbol ok], data.fetch("symbol"))
     assert_equal(["Module", "MsgpackInitCompatOuter::Inner"], data.fetch("present"))
     assert_equal(["String", "MsgpackInitCompatOuter::Inner"], data.fetch("missing"))
   end

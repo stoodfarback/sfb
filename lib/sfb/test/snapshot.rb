@@ -61,7 +61,7 @@ module Sfb::Test::Snapshot
       when String
         val.gsub(from, to)
       when Hash
-        val.to_h { |k, v| [gsub_in_structure(k, from, to), gsub_in_structure(v, from, to)] }
+        val.to_h {|k, v| [gsub_in_structure(k, from, to), gsub_in_structure(v, from, to)] }
       when Array
         val.map { gsub_in_structure(it, from, to) }
       else
@@ -70,7 +70,7 @@ module Sfb::Test::Snapshot
     end
 
     def apply_gsubs(val)
-      Array(gsubs).reduce(val) { |acc, (from, to)| gsub_in_structure(acc, from, to) }
+      Array(gsubs).reduce(val) {|acc, (from, to)| gsub_in_structure(acc, from, to) }
     end
 
     def strict?

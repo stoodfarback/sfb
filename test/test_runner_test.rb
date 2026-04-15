@@ -5,9 +5,9 @@ require_relative("test_helper")
 class TestRunnerTest < Minitest::Test
   FIXTURE_DIR = File.expand_path("fixture/dummy_project", __dir__)
 
-  def run_fixture(*args)
+  def run_fixture(*)
     stdout, stderr, status = Open3.capture3(
-      "bin/test", *args,
+      "bin/test", *,
       chdir: FIXTURE_DIR
     )
     [stdout + stderr, status]
@@ -62,8 +62,8 @@ class TestRunnerTest < Minitest::Test
     refute(status.success?)
     assert_match(/No tests matched: nonexistent/, output)
     assert_match(/Available tests \(first 3\):/, output)
-    assert_match(/test\/alpha_test\.rb AlphaTest#test_two/, output)
-    assert_match(/Usage: bin\/test/, output)
+    assert_match(%r{test/alpha_test\.rb AlphaTest#test_two}, output)
+    assert_match(%r{Usage: bin/test}, output)
   end
 
   def test_multiple_patterns_default_or

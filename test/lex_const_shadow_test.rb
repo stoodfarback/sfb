@@ -507,12 +507,12 @@ class LexConstShadowTest < Minitest::Test
     RUBY
 
     assert_equal(%i[child child child child child child], PrivInstChild.new.public_meth)
-    assert(PrivInstChild.private_instance_methods.include?(:private_meth_1))
-    assert(PrivInstChild.private_instance_methods.include?(:private_meth_2))
-    assert(PrivInstChild.private_instance_methods.include?(:private_meth_3))
-    assert(PrivInstChild.private_instance_methods.include?(:private_meth_4))
-    assert(PrivInstChild.private_instance_methods.include?(:private_meth_5))
-    assert(PrivInstChild.private_instance_methods.include?(:private_meth_6))
+    assert(PrivInstChild.private_method_defined?(:private_meth_1))
+    assert(PrivInstChild.private_method_defined?(:private_meth_2))
+    assert(PrivInstChild.private_method_defined?(:private_meth_3))
+    assert(PrivInstChild.private_method_defined?(:private_meth_4))
+    assert(PrivInstChild.private_method_defined?(:private_meth_5))
+    assert(PrivInstChild.private_method_defined?(:private_meth_6))
   end
 
   def test_mixin_methods_rebound

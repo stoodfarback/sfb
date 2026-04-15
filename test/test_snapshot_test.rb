@@ -94,11 +94,11 @@ class TestSnapshotTest < Minitest::Test
   def test_hash_fixture_uses_yaml
     with_sandbox do
       path = fixture_path_for("test_snapshot/hash_fixture_uses_yaml", ".yml")
-      silence_warn { assert_snapshot({a: 1, b: "two"}) }
+      silence_warn { assert_snapshot({ a: 1, b: "two" }) }
 
       assert(File.exist?(path))
-      loaded = YAML.safe_load(File.read(path), permitted_classes: [Symbol])
-      assert_equal({a: 1, b: "two"}, loaded)
+      loaded = YAML.safe_load_file(path, permitted_classes: [Symbol])
+      assert_equal({ a: 1, b: "two" }, loaded)
     end
   end
 
@@ -128,10 +128,10 @@ class TestSnapshotTest < Minitest::Test
       Sfb::Test::Snapshot.gsubs << [/\d{4}-\d{2}-\d{2}/, "GSUB_DATE"]
       path = fixture_path_for("test_snapshot/gsubs_also_apply_inside_structures", ".yml")
 
-      silence_warn { assert_snapshot({date: "2026-04-15", other: 42}) }
+      silence_warn { assert_snapshot({ date: "2026-04-15", other: 42 }) }
 
-      loaded = YAML.safe_load(File.read(path), permitted_classes: [Symbol])
-      assert_equal({date: "GSUB_DATE", other: 42}, loaded)
+      loaded = YAML.safe_load_file(path, permitted_classes: [Symbol])
+      assert_equal({ date: "GSUB_DATE", other: 42 }, loaded)
     end
   end
 
@@ -179,7 +179,7 @@ class TestSnapshotTest < Minitest::Test
       snap = File.read(fixture_path_for("test_snapshot/assert_snapshot_dir_renders_tree_and_contents", ".txt"))
       assert_match(/== tree ==/, snap)
       assert_match(/a\.txt/, snap)
-      assert_match(/sub\//, snap)
+      assert_match(%r{sub/}, snap)
       assert_match(/b\.txt/, snap)
       assert_match(/binary \.png file, size=\d+, xxh64=[0-9a-f]{16}/, snap)
       assert_match(/== file: a\.txt ==/, snap)
@@ -219,24 +219,24 @@ class TestSnapshotTest < Minitest::Test
       path = fixture_path_for("test_snapshot/snapshot_cache_writes_on_miss_and_reads_on_hit", ".json")
       calls = 0
 
-      result1 = snapshot_cache { calls += 1; {value: 42} }
-      assert_equal({value: 42}, result1)
+      result1 = snapshot_cache { calls += 1; { value: 42 } }
+      assert_equal({ value: 42 }, result1)
       assert_equal(1, calls)
       assert(File.exist?(path))
 
-      result2 = snapshot_cache { calls += 1; {value: 999} }
-      assert_equal({value: 42}, result2)
+      result2 = snapshot_cache { calls += 1; { value: 999 } }
+      assert_equal({ value: 42 }, result2)
       assert_equal(1, calls)
     end
   end
 
   def test_snapshot_cache_reads_from_cache_on_miss_too
     with_sandbox do
-      result1 = snapshot_cache("string_keys") { {"value" => 42} }
-      result2 = snapshot_cache("string_keys") { {"value" => 999} }
+      result1 = snapshot_cache("string_keys") { { "value" => 42 } }
+      result2 = snapshot_cache("string_keys") { { "value" => 999 } }
 
-      assert_equal({value: 42}, result1)
-      assert_equal({value: 42}, result2)
+      assert_equal({ value: 42 }, result1)
+      assert_equal({ value: 42 }, result2)
     end
   end
 
