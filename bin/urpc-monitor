@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+URPC_ROOT="${URPC_ROOT:-/tmp/urpc}"
+SOCK_PATH="$URPC_ROOT/monitor.sock"
+
+if [ ! -S "$SOCK_PATH" ]; then
+  echo "Monitor socket not found at $SOCK_PATH (is the broker running?)" >&2
+  exit 1
+fi
+
+exec socat - UNIX-CONNECT:"$SOCK_PATH"

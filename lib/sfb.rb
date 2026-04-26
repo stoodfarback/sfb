@@ -3,6 +3,8 @@
 require("sfb/outside_gems")
 require("sfb/core_ext")
 
+autoload(:Urpc, "urpc")
+
 module Sfb
   autoload(:Util, "sfb/util")
   autoload(:Store, "sfb/store")
