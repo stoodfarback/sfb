@@ -7,6 +7,7 @@ PATH
       base32-crockford
       http
       minitest
+      minitest-mock
       msgpack
       nokogiri
       oj
@@ -82,6 +83,7 @@ GEM
     minitest (6.0.2)
       drb (~> 2.0)
       prism (~> 1.5)
+    minitest-mock (5.27.0)
     msgpack (1.8.0)
     nokogiri (1.19.1-x86_64-linux-gnu)
       racc (~> 1.4)

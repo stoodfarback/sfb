@@ -44,6 +44,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency("xxhash")
 
   spec.add_dependency("minitest")
+  spec.add_dependency("minitest-mock")
 
   # tmp explicit dependency on openssl to fix openssl compat issue
   spec.add_dependency("openssl")
