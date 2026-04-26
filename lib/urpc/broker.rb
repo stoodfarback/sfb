@@ -313,7 +313,7 @@ module Urpc
       formatted_kargs = call.kargs.empty? ? nil : call.kargs.map { "#{it[0]}: #{it[1].inspect}" }.join(", ")
       all_args = [formatted_args, formatted_kargs].compact.reject(&:empty?).join(", ")
       type = call.cast? ? "CAST" : "CALL"
-      line = "[#{Time.now.to_f}] [#{call.id[0..7]}] #{type} #{call.rpc_key} ##{call.name}(#{all_args})\n"
+      line = "[#{'%.6f' % Time.now.to_f}] [#{call.id[0..7]}] #{type} #{call.rpc_key} ##{call.name}(#{all_args})\n"
       broadcast_monitor_line(line)
     end
 
@@ -323,7 +323,7 @@ module Urpc
       type, raw_payload = frame
       response_type = MONITOR_RESPONSE_TYPES.fetch(type)
       preview = monitor_payload_preview(raw_payload)
-      line = "[#{Time.now.to_f}] {#{id[0..7]}} #{response_type} #{preview}\n"
+      line = "[#{'%.6f' % Time.now.to_f}] {#{id[0..7]}} #{response_type} #{preview}\n"
       broadcast_monitor_line(line)
     end
 
