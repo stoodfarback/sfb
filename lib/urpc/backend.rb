@@ -25,73 +25,56 @@ module Urpc
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET, MessagePack::UnpackError => e
       warn("urpc broker worker: backend died: #{e.class} #{e.message}")
     ensure
-      @current_reply_io&.close rescue nil
-      @current_reply_io = nil
       sock.close rescue nil
       broker.unregister_backend(self)
     end
 
     def process(call)
-      @current_reply_io = nil
-
-      if !call.cast?
-        @current_reply_io = Util.open_reply_writer(call.reply_path)
-        if !@current_reply_io
-          broker.remove_active(call.id)
-          unlink_quiet(call.reply_path)
-          return
-        end
+      if !call.ensure_reply_open
+        broker.abandon_call(call)
+        return
       end
 
+      broker.in_flight_inc(key)
+      dispatched = false
+      call_reclaimed = false
       begin
-        broker.in_flight_inc(key)
         sock.write(MessagePack.pack(call.to_backend_request))
+        dispatched = true
 
         loop do
           frame = unpacker.read
           raise(MessagePack::UnpackError, "malformed backend frame") if !Frames.valid_response_frame?(frame)
           type = frame[0]
           broker.broadcast_monitor_response(call, frame)
-          if @current_reply_io
-            begin
-              @current_reply_io.write(MessagePack.pack(frame))
-            rescue Errno::EPIPE
-              @current_reply_io.close rescue nil
-              @current_reply_io = nil
-            end
-          end
+          call.write_reply_frame(frame)
           if call.cast? && type == :error
             warn("urpc broker: cast to #{key} returned error: #{frame.inspect}")
           end
           break if Frames::TERMINAL_TYPES.include?(type)
         end
       rescue IOError, Errno::EPIPE, Errno::ECONNRESET, MessagePack::UnpackError => e
-        synthesize_backend_died(call, e) if @current_reply_io
+        if dispatched
+          synthesize_backend_died(call, e) if call.reply_open?
+        else
+          broker.backend_dispatch_failed(self, call)
+          call_reclaimed = true
+        end
         raise
       ensure
         broker.in_flight_dec(key)
-        broker.remove_active(call.id)
-        @current_reply_io&.close rescue nil
-        @current_reply_io = nil
-        unlink_quiet(call.reply_path) if !call.cast?
+        if !call_reclaimed
+          broker.finish_call(call)
+        end
       end
     end
 
     def synthesize_backend_died(call, error)
       frame = Frames.error_frame(RemoteException.new("backend connection lost: #{error.class} #{error.message}"))
       broker.broadcast_monitor_response(call, frame)
-      @current_reply_io.write(MessagePack.pack(frame))
-    rescue Errno::EPIPE
-      nil
+      call.write_reply_frame(frame)
     ensure
-      @current_reply_io.close rescue nil
-      @current_reply_io = nil
-    end
-
-    def unlink_quiet(path)
-      File.unlink(path)
-    rescue Errno::ENOENT
-      nil
+      call.close_reply_io
     end
   end
 end

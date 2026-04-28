@@ -3,6 +3,7 @@
 module Urpc
   autoload(:Backend, "urpc/backend")
   autoload(:Broker, "urpc/broker")
+  autoload(:BrokerCall, "urpc/broker_call")
   autoload(:Call, "urpc/call")
   autoload(:CliCall, "urpc/cli_call")
   autoload(:Client, "urpc/client")

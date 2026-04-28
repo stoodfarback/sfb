@@ -4,19 +4,24 @@ module Urpc
   class Call
     class Invalid < StandardError; end
 
-    attr_accessor(:id, :rpc_key, :name, :args, :kargs, :cast)
+    attr_accessor(:id, :rpc_key, :name, :args, :kargs, :cast, :wait_for_server)
 
-    def initialize(id:, rpc_key:, name:, args:, kargs:, cast:)
+    def initialize(id:, rpc_key:, name:, args:, kargs:, cast:, wait_for_server: false)
       self.id = id
       self.rpc_key = rpc_key
       self.name = name
       self.args = args
       self.kargs = kargs
       self.cast = cast
+      self.wait_for_server = wait_for_server
     end
 
     def cast?
       cast
+    end
+
+    def wait_for_server?
+      wait_for_server
     end
 
     def request_path
@@ -40,6 +45,7 @@ module Urpc
         args: args,
         kargs: kargs,
         cast: cast,
+        wait_for_server: wait_for_server,
       }
     end
 
@@ -70,6 +76,7 @@ module Urpc
         args: hash[:args],
         kargs: hash[:kargs],
         cast: hash[:cast],
+        wait_for_server: hash[:wait_for_server],
       )
     end
 
@@ -79,7 +86,8 @@ module Urpc
         hash[:name].is_a?(Symbol) &&
         hash[:args].is_a?(Array) &&
         hash[:kargs].is_a?(Hash) &&
-        [true, false].include?(hash[:cast])
+        [true, false].include?(hash[:cast]) &&
+        [true, false].include?(hash[:wait_for_server])
     end
   end
 end

@@ -201,6 +201,7 @@ class UrpcFailuresTest < Minitest::Test
         args: ["hello"],
         kargs: {},
         cast: false,
+        wait_for_server: false,
       }
       File.write(reply_path, "not a fifo")
       packed = MessagePack.pack(request)
@@ -307,37 +308,63 @@ class UrpcFailuresTest < Minitest::Test
     end
   end
 
+  def test_wait_for_server_cast_queues_until_backend_registers
+    with_broker do
+      received = Queue.new
+      handler = Object.new
+      handler.singleton_class.define_method(:record) do |value|
+        received << value
+        nil
+      end
+
+      client = Urpc::Client.new("wait_cast_key", timeout: 5, wait_for_server: true)
+      assert_equal(0, @broker.backend_count("wait_cast_key"))
+      assert_nil(client.cast(:record, "later"))
+
+      raise("cast was not queued") if !poll_until {
+        @broker.state_lock.synchronize { (@broker.queues_by_key["wait_cast_key"]&.size || 0) == 1 }
+      }
+      assert(received.empty?)
+
+      start_server("wait_cast_key", handler)
+      wait_for_backend("wait_cast_key")
+
+      raise("cast did not arrive") if !poll_until { !received.empty? }
+      assert_equal("later", received.pop)
+    end
+  end
+
   def test_client_timeout_before_dispatch
     with_broker do
       invoked = Queue.new
+      gate = Queue.new
       handler = Object.new
       handler.singleton_class.define_method(:slow_method) do |x|
-        invoked << true
-        sleep(10)
+        invoked << x
+        gate.pop
         x
       end
 
-      # Use a slow handler that sleeps, but client timeout is very short.
-      # We need to make the server busy so the request sits in queue.
       start_server("timeout_pre", handler)
       wait_for_backend("timeout_pre")
 
-      # Keep the server busy with a long call
       busy_thread = Thread.new do
         busy_client = Urpc::Client.new("timeout_pre", timeout: 10)
         busy_client.call(:slow_method, "blocking") rescue nil
       end
 
-      # Wait until the server is busy
       raise("server never got busy") if !poll_until { !invoked.empty? }
 
-      # Now submit with a very short timeout — this request will sit in queue
       client = Urpc::Client.new("timeout_pre", timeout: 0.2)
       assert_raises(Urpc::TimeoutException) { client.call(:slow_method, "should_not_run") }
 
-      # The second call's handler should NOT have been invoked (only one invocation from blocking call)
+      gate << true
+      busy_thread.value
+      sleep(0.3)
+
       assert_equal(1, invoked.size)
     ensure
+      2.times { gate << true rescue nil }
       busy_thread&.kill rescue nil
     end
   end
@@ -596,6 +623,77 @@ class UrpcFailuresTest < Minitest::Test
       assert_match(/submit/i, e.message)
     ensure
       dummy_sock&.close rescue nil
+    end
+  end
+
+  def test_dead_socket_requeues_to_live_backend
+    with_broker do
+      handler = Object.new
+      handler.singleton_class.define_method(:ping) { |x| sleep(1); x }
+
+      start_server("requeue_key", handler)
+      wait_for_backend("requeue_key")
+
+      # Kill server — socket closes but broker backend stays registered with dead socket
+      @server_threads.pop.kill rescue nil
+      sleep(0.3)
+
+      # Start replacement server — now 1 dead + 1 live backend
+      start_server("requeue_key", handler)
+      wait_for_backend("requeue_key", count: 2)
+
+      # Concurrent calls — at least one will hit the dead backend
+      results = 3.times.map do |i|
+        Thread.new { Urpc::Client.new("requeue_key", timeout: 10).call(:ping, i) }
+      end.map(&:value)
+
+      assert_equal([0, 1, 2], results.sort)
+    end
+  end
+
+  def test_dead_socket_requeues_and_waits_for_new_backend
+    with_broker do
+      handler = Object.new
+      handler.singleton_class.define_method(:ping) { |x| x }
+
+      start_server("requeue_wait_key", handler)
+      wait_for_backend("requeue_wait_key")
+
+      # Kill server — stale backend
+      @server_threads.pop.kill rescue nil
+      sleep(0.3)
+
+      # Send a call - only the dead backend is registered, but this client opts into waiting.
+      call_thread = Thread.new do
+        Urpc::Client.new("requeue_wait_key", timeout: 10, wait_for_server: true).call(:ping, "delayed")
+      end
+
+      sleep(1)
+
+      # Start replacement server — should pick up the re-queued call
+      start_server("requeue_wait_key", handler)
+      wait_for_backend("requeue_wait_key")
+
+      assert_equal("delayed", call_thread.value)
+    end
+  end
+
+  def test_dead_socket_requeue_without_wait_for_server_fails_fast
+    with_broker do
+      handler = Object.new
+      handler.singleton_class.define_method(:ping) { |x| x }
+
+      start_server("requeue_no_wait_key", handler)
+      wait_for_backend("requeue_no_wait_key")
+
+      # Kill server - stale backend remains registered until the next dispatch.
+      @server_threads.pop.kill rescue nil
+      sleep(0.3)
+
+      e = assert_raises(Urpc::NoServerError) do
+        Urpc::Client.new("requeue_no_wait_key", timeout: 10).call(:ping, "fail_fast")
+      end
+      assert_match(/no server registered/, e.message)
     end
   end
 

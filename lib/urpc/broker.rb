@@ -187,8 +187,12 @@ module Urpc
 
     def backend_count(key)
       state_lock.synchronize do
-        (backends_by_key[key] || []).size + (internal_backends_by_key[key] || []).size
+        backend_count_locked(key)
       end
+    end
+
+    def backend_count_locked(key)
+      (backends_by_key[key] || []).size + (internal_backends_by_key[key] || []).size
     end
 
     def stats_snapshot
@@ -222,10 +226,6 @@ module Urpc
 
     def in_flight_dec(key)
       state_lock.synchronize { in_flight_by_key[key] -= 1 }
-    end
-
-    def add_active(id, key)
-      state_lock.synchronize { active_ids[id] = key }
     end
 
     def remove_active(id)
@@ -268,6 +268,7 @@ module Urpc
       now = Time.now
       active = state_lock.synchronize { active_ids.keys.to_h { [it, true] } }
 
+      # TODO: expire queued `wait_for_server` calls whose `reply_path` is gone.
       sweep_dir(Urpc.requests_dir, ".msgpack", now:, expiry:, active:)
       sweep_dir(Urpc.replies_dir, ".fifo", now:, expiry:, active:)
     end
@@ -319,7 +320,7 @@ module Urpc
 
     def broadcast_monitor_response(call_or_id, frame)
       return if monitors.empty?
-      id = call_or_id.is_a?(Call) ? call_or_id.id : call_or_id
+      id = call_or_id.is_a?(String) ? call_or_id : call_or_id.id
       type, raw_payload = frame
       response_type = MONITOR_RESPONSE_TYPES.fetch(type)
       preview = monitor_payload_preview(raw_payload)
@@ -352,7 +353,7 @@ module Urpc
     end
 
     def process_submission(id)
-      call =
+      request_call =
         begin
           Call.load(id)
         rescue Errno::ENOENT
@@ -366,30 +367,38 @@ module Urpc
           File.unlink(Call.request_path(id)) rescue nil
         end
 
-      if !call.cast? && !File.pipe?(call.reply_path)
+      if !request_call.cast? && !File.pipe?(request_call.reply_path)
         warn("urpc broker: reply fifo missing or invalid for #{id}")
         return
       end
 
+      call = BrokerCall.new(call: request_call)
+
       broadcast_monitor_call(call)
 
-      enqueued = state_lock.synchronize do
-        total_backends = (backends_by_key[call.rpc_key] || []).size + (internal_backends_by_key[call.rpc_key] || []).size
-        if total_backends == 0
-          false
-        else
-          active_ids[call.id] = call.rpc_key
-          (queues_by_key[call.rpc_key] ||= Queue.new) << call
-          true
-        end
-      end
-
-      if !enqueued && !call.cast?
-        synthesize_error_reply(call.id, Urpc::NoServerError, "no server registered for #{call.rpc_key}")
+      if !enqueue_submitted_call(call) && !call.cast?
+        synthesize_call_error(call, Urpc::NoServerError, "no server registered for #{call.rpc_key}")
       end
     rescue => e
-      warn("urpc broker: failed to load request #{id}: #{e.class} #{e.message}")
-      synthesize_error_reply(id, Urpc::RemoteException, "#{e.class}: #{e.message}")
+      warn("urpc broker: failed to process request #{id}: #{e.class} #{e.message}")
+      if call
+        synthesize_call_error(call, Urpc::RemoteException, "#{e.class}: #{e.message}")
+      else
+        synthesize_error_reply(id, Urpc::RemoteException, "#{e.class}: #{e.message}")
+      end
+    end
+
+    def enqueue_submitted_call(call)
+      state_lock.synchronize do
+        can_enqueue = backend_count_locked(call.rpc_key) > 0 || call.wait_for_server?
+        enqueue_call_locked(call) if can_enqueue
+        can_enqueue
+      end
+    end
+
+    def enqueue_call_locked(call)
+      active_ids[call.id] = call.rpc_key
+      (queues_by_key[call.rpc_key] ||= Queue.new) << call
     end
 
     def synthesize_error_reply(id, exception_class, message)
@@ -401,15 +410,33 @@ module Urpc
         return
       end
       begin
-        frame = Frames.error_frame(exception_class.new(message))
-        broadcast_monitor_response(id, frame)
-        io.write(MessagePack.pack(frame))
-      rescue Errno::EPIPE
-        nil
+        write_error_frame(id, io, exception_class, message)
       ensure
         io.close rescue nil
         File.unlink(reply_path) rescue nil
       end
+    end
+
+    def synthesize_call_error(call, exception_class, message)
+      return if call.cast?
+      if !call.ensure_reply_open
+        abandon_call(call)
+        return
+      end
+
+      begin
+        write_error_frame(call.id, call.reply_io, exception_class, message)
+      ensure
+        finish_call(call)
+      end
+    end
+
+    def write_error_frame(id, io, exception_class, message)
+      frame = Frames.error_frame(exception_class.new(message))
+      broadcast_monitor_response(id, frame)
+      io.write(MessagePack.pack(frame))
+    rescue Errno::EPIPE
+      nil
     end
 
     def accept_loop
@@ -461,21 +488,37 @@ module Urpc
     def unregister_backend(backend)
       key = backend.key
       drained_calls = state_lock.synchronize do
-        list = backends_by_key[key] || []
-        list.delete(backend)
-        backends_by_key.delete(key) if list.empty?
+        remove_backend_locked(backend)
         drain_queued_calls_if_no_backends_locked(key)
       end
 
       synthesize_no_server_for_drained_calls(key, drained_calls)
     end
 
+    def backend_dispatch_failed(backend, call)
+      key = backend.key
+      failed_calls = state_lock.synchronize do
+        remove_backend_locked(backend)
+        enqueue_call_locked(call)
+        drain_queued_calls_if_no_backends_locked(key)
+      end
+
+      synthesize_no_server_for_drained_calls(key, failed_calls)
+    end
+
+    def remove_backend_locked(backend)
+      key = backend.key
+      list = backends_by_key[key] || []
+      list.delete(backend)
+      backends_by_key.delete(key) if list.empty?
+    end
+
     def drain_queued_calls_if_no_backends_locked(key)
-      total_backends = (backends_by_key[key] || []).size + (internal_backends_by_key[key] || []).size
-      return [] if total_backends > 0
+      return [] if backend_count_locked(key) > 0
 
       q = queues_by_key.delete(key)
-      calls = []
+      failed_calls = []
+      waiting_calls = []
       loop do
         begin
           call = q&.pop(true)
@@ -484,18 +527,39 @@ module Urpc
         end
         break if !call
 
-        active_ids.delete(call.id)
-        calls << call
+        if call.wait_for_server?
+          waiting_calls << call
+        else
+          active_ids.delete(call.id)
+          failed_calls << call
+        end
       end
-      calls
+
+      if !waiting_calls.empty?
+        waiting_q = Queue.new
+        waiting_calls.each { waiting_q << it }
+        queues_by_key[key] = waiting_q
+      end
+
+      failed_calls
     end
 
     def synthesize_no_server_for_drained_calls(key, calls)
       calls.each do |call|
         if !call.cast?
-          synthesize_error_reply(call.id, Urpc::NoServerError, "no server registered for #{key}")
+          synthesize_call_error(call, Urpc::NoServerError, "no server registered for #{key}")
         end
       end
+    end
+
+    def abandon_call(call)
+      remove_active(call.id)
+      call.abandon!
+    end
+
+    def finish_call(call)
+      remove_active(call.id)
+      call.finish!
     end
   end
 end

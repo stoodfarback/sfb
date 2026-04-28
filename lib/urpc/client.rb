@@ -2,11 +2,12 @@
 
 module Urpc
   class Client
-    attr_accessor(:rpc_key, :timeout)
+    attr_accessor(:rpc_key, :timeout, :wait_for_server)
 
-    def initialize(rpc_key, timeout: 0)
+    def initialize(rpc_key, timeout: 0, wait_for_server: false)
       self.rpc_key = rpc_key
       self.timeout = timeout
+      self.wait_for_server = wait_for_server
     end
 
     def call(method_name, *, **, &block)
@@ -35,6 +36,7 @@ module Urpc
         args: args,
         kargs: kargs,
         cast: true,
+        wait_for_server: wait_for_server,
       )
       begin
         call_obj.write_request_file!

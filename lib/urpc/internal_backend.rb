@@ -28,18 +28,12 @@ module Urpc
     end
 
     def process(call)
-      reply_io = nil
-
-      if !call.cast?
-        reply_io = Util.open_reply_writer(call.reply_path)
-        if !reply_io
-          broker.remove_active(call.id)
-          unlink_quiet(call.reply_path)
-          return
-        end
+      if !call.ensure_reply_open
+        broker.abandon_call(call)
+        return
       end
 
-      sink = call.cast? ? ResponseStream::Sinks::Null.new : ResponseStream::Sinks::Fifo.new(reply_io)
+      sink = call.cast? ? ResponseStream::Sinks::Null.new : ResponseStream::Sinks::Fifo.new(call.reply_io)
       sink = MonitorSink.new(sink: sink, broker: broker, call: call)
       stream = ResponseStream.new(sink: sink)
       begin
@@ -59,16 +53,8 @@ module Urpc
         end
       ensure
         broker.in_flight_dec(key)
-        broker.remove_active(call.id)
-        reply_io&.close rescue nil
-        unlink_quiet(call.reply_path) if !call.cast?
+        broker.finish_call(call)
       end
-    end
-
-    def unlink_quiet(path)
-      File.unlink(path)
-    rescue Errno::ENOENT
-      nil
     end
   end
 end

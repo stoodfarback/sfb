@@ -19,6 +19,7 @@ module Urpc
         args: args,
         kargs: kargs,
         cast: false,
+        wait_for_server: client.wait_for_server,
       )
 
       begin
