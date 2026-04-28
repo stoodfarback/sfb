@@ -4,6 +4,7 @@ module Urpc
   autoload(:Backend, "urpc/backend")
   autoload(:Broker, "urpc/broker")
   autoload(:Call, "urpc/call")
+  autoload(:CliCall, "urpc/cli_call")
   autoload(:Client, "urpc/client")
   autoload(:Event, "urpc/event")
   autoload(:EventStream, "urpc/event_stream")
@@ -61,5 +62,9 @@ module Urpc
     ensure
       broker.stop
     end
+  end
+
+  def self.run_call
+    CliCall.run
   end
 end
