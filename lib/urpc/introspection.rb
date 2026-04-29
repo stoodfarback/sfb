@@ -9,5 +9,7 @@ module Urpc
     end
 
     Util.def_stream_to_basic(self, :stats) { broker.stats_snapshot }
+    Util.def_stream_to_basic(self, :ping) { :pong }
+    Util.def_stream_to_basic(self, :echo) {|*args, **kargs| {args:, kargs:} }
   end
 end
