@@ -334,6 +334,198 @@ class UrpcFailuresTest < Minitest::Test
     end
   end
 
+  def test_wait_for_server_numeric_times_out_with_no_server
+    with_broker do
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      e = assert_raises(Urpc::NoServerError) do
+        Urpc::Client.new("wait_numeric_missing", timeout: 2, wait_for_server: 0.3).call(:whatever)
+      end
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+
+      assert_match(/no server registered/, e.message)
+      assert_operator(elapsed, :>=, 0.2)
+      assert_operator(elapsed, :<, 1.2)
+    end
+  end
+
+  def test_wait_for_server_numeric_dispatches_when_backend_appears_in_time
+    with_broker do
+      handler = echo_handler
+      call_thread = Thread.new do
+        Urpc::Client.new("wait_numeric_later", timeout: 2, wait_for_server: 2).call(:echo, "ok")
+      end
+
+      raise("call was not queued") if !poll_until {
+        @broker.state_lock.synchronize { (@broker.queues_by_key["wait_numeric_later"]&.size || 0) == 1 }
+      }
+
+      sleep(0.2)
+      start_server("wait_numeric_later", handler)
+      wait_for_backend("wait_numeric_later")
+
+      assert_equal("ok", call_thread.value)
+    ensure
+      call_thread&.kill rescue nil
+    end
+  end
+
+  def test_wait_for_server_numeric_stale_backend_times_out_without_replacement
+    with_broker do
+      handler = echo_handler
+      start_server("wait_numeric_stale_timeout", handler)
+      wait_for_backend("wait_numeric_stale_timeout")
+
+      @server_threads.pop.kill rescue nil
+      sleep(0.3)
+
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      e = assert_raises(Urpc::NoServerError) do
+        Urpc::Client.new("wait_numeric_stale_timeout", timeout: 5, wait_for_server: 0.3).call(:echo, "late")
+      end
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+
+      assert_match(/no server registered/, e.message)
+      assert_operator(elapsed, :<, 1.5)
+    end
+  end
+
+  def test_wait_for_server_numeric_stale_backend_requeues_to_replacement_before_deadline
+    with_broker do
+      handler = echo_handler
+      start_server("wait_numeric_stale_requeue", handler)
+      wait_for_backend("wait_numeric_stale_requeue")
+
+      @server_threads.pop.kill rescue nil
+      sleep(0.3)
+
+      call_thread = Thread.new do
+        Urpc::Client.new("wait_numeric_stale_requeue", timeout: 3, wait_for_server: 2).call(:echo, "delayed")
+      end
+
+      sleep(0.4)
+      start_server("wait_numeric_stale_requeue", handler)
+      wait_for_backend("wait_numeric_stale_requeue")
+
+      assert_equal("delayed", call_thread.value)
+    ensure
+      call_thread&.kill rescue nil
+    end
+  end
+
+  def test_wait_for_server_numeric_request_hash_round_trips
+    with_root do
+      FileUtils.mkdir_p(Urpc.requests_dir)
+      id = SecureRandom.hex(16)
+      call = Urpc::Call.new(
+        id: id,
+        rpc_key: "round_trip",
+        name: :echo,
+        args: ["x"],
+        kargs: {},
+        cast: false,
+        wait_for_server: 1.25,
+      )
+
+      call.write_request_file!
+      loaded = Urpc::Call.load(id)
+
+      assert_equal(1.25, loaded.wait_for_server)
+      assert_equal(1.25, loaded.wait_for_server_seconds)
+      assert(loaded.wait_for_server?)
+    ensure
+      File.unlink(Urpc::Call.request_path(id)) rescue nil
+    end
+  end
+
+  def test_wait_for_server_rejects_invalid_numeric_values
+    build_call = ->(wait_for_server) do
+      Urpc::Call.new(
+        id: SecureRandom.hex(16),
+        rpc_key: "invalid_wait",
+        name: :echo,
+        args: [],
+        kargs: {},
+        cast: false,
+        wait_for_server: wait_for_server,
+      )
+    end
+
+    assert_raises(ArgumentError) { build_call.call(-0.1) }
+    assert_raises(ArgumentError) { build_call.call(Float::INFINITY) }
+    assert_raises(ArgumentError) { build_call.call(Float::NAN) }
+  end
+
+  def test_wait_for_server_zero_matches_false
+    with_broker do
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      assert_raises(Urpc::NoServerError) do
+        Urpc::Client.new("wait_zero", timeout: 2, wait_for_server: 0).call(:whatever)
+      end
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+
+      assert_operator(elapsed, :<, 0.5)
+      assert_equal(0, @broker.state_lock.synchronize { @broker.wait_calls_by_id.size })
+    end
+  end
+
+  def test_wait_expiry_recomputes_after_earliest_deadline_removed
+    with_broker do
+      handler = echo_handler
+      first_thread = Thread.new do
+        Urpc::Client.new("wait_recompute_first", timeout: 2, wait_for_server: 0.5).call(:echo, "first")
+      end
+      raise("first call was not queued") if !poll_until {
+        @broker.state_lock.synchronize { (@broker.queues_by_key["wait_recompute_first"]&.size || 0) == 1 }
+      }
+
+      second_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      second_thread = Thread.new do
+        Urpc::Client.new("wait_recompute_second", timeout: 2, wait_for_server: 0.9).call(:echo, "second")
+      rescue => e
+        e
+      end
+      raise("second call was not queued") if !poll_until {
+        @broker.state_lock.synchronize { (@broker.queues_by_key["wait_recompute_second"]&.size || 0) == 1 }
+      }
+
+      start_server("wait_recompute_first", handler)
+      wait_for_backend("wait_recompute_first")
+      assert_equal("first", first_thread.value)
+
+      result = second_thread.value
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - second_started_at
+
+      assert_kind_of(Urpc::NoServerError, result)
+      assert_operator(elapsed, :>=, 0.7)
+      assert_operator(elapsed, :<, 1.8)
+    ensure
+      first_thread&.kill rescue nil
+      second_thread&.kill rescue nil
+    end
+  end
+
+  def test_broker_stop_wakes_wait_expiry_thread
+    with_broker do
+      call_thread = Thread.new do
+        Urpc::Client.new("wait_stop", timeout: 0, wait_for_server: 30).call(:whatever)
+      rescue => e
+        e
+      end
+
+      raise("call was not queued") if !poll_until {
+        @broker.state_lock.synchronize { (@broker.queues_by_key["wait_stop"]&.size || 0) == 1 }
+      }
+
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      @broker.stop
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+
+      assert_operator(elapsed, :<, 0.75)
+    ensure
+      call_thread&.kill rescue nil
+    end
+  end
+
   def test_client_timeout_before_dispatch
     with_broker do
       invoked = Queue.new

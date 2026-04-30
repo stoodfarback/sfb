@@ -15,8 +15,9 @@ module Urpc
       error: "ERR",
     }.freeze
 
-    attr_accessor(:queues_by_key, :backends_by_key, :in_flight_by_key, :active_ids, :internal_backends_by_key, :state_lock, :submit_read, :submit_dummy_write,
-      :sock_server, :reader_thread, :accept_thread, :sweeper_thread, :shutdown, :stopped, :broker_lock, :owns_broker_lock, :filesystem_ready,
+    attr_accessor(:queues_by_key, :backends_by_key, :in_flight_by_key, :active_ids, :wait_calls_by_id, :wait_cv, :next_wait_deadline,
+      :internal_backends_by_key, :state_lock, :submit_read, :submit_dummy_write,
+      :sock_server, :reader_thread, :accept_thread, :sweeper_thread, :wait_expiry_thread, :shutdown, :stopped, :broker_lock, :owns_broker_lock, :filesystem_ready,
       :monitor_server, :monitor_accept_thread, :monitors)
 
     def initialize
@@ -25,6 +26,9 @@ module Urpc
       self.internal_backends_by_key = {}
       self.in_flight_by_key = Hash.new(0)
       self.active_ids = {}
+      self.wait_calls_by_id = {}
+      self.wait_cv = ConditionVariable.new
+      self.next_wait_deadline = nil
       self.state_lock = Mutex.new
       self.shutdown = false
       self.stopped = false
@@ -42,13 +46,17 @@ module Urpc
       start_accept_thread
       start_monitor_server
       start_sweeper_thread
+      start_wait_expiry_thread
       sleep(1) until shutdown
     end
 
     def stop
       return if stopped
       self.stopped = true
-      self.shutdown = true
+      state_lock.synchronize do
+        self.shutdown = true
+        wait_cv.broadcast
+      end
 
       begin
         signal_workers_stop
@@ -71,6 +79,7 @@ module Urpc
       accept_thread&.join(1) rescue nil
       monitor_accept_thread&.join(1) rescue nil
       sweeper_thread&.join(1) rescue nil
+      wait_expiry_thread&.join(1) rescue nil
 
       threads = state_lock.synchronize do
         backends_by_key.values.flatten.map(&:worker_thread) +
@@ -228,10 +237,6 @@ module Urpc
       state_lock.synchronize { in_flight_by_key[key] -= 1 }
     end
 
-    def remove_active(id)
-      state_lock.synchronize { active_ids.delete(id) }
-    end
-
     def register_introspection_backend
       backend = InternalBackend.new(key: RESERVED_KEY, broker: self, handler: Introspection.new(self))
       state_lock.synchronize do
@@ -254,14 +259,117 @@ module Urpc
     end
 
     def start_sweeper_thread
-      self.sweeper_thread = Thread.new do
-        loop do
-          break if shutdown
-          sleep(SWEEP_INTERVAL)
-          sweep!
-        end
-      end
+      self.sweeper_thread = Thread.new { sweeper_loop }
       sweeper_thread.report_on_exception = false
+    end
+
+    def sweeper_loop
+      next_sweep = monotonic_now + SWEEP_INTERVAL
+      loop do
+        state_lock.synchronize do
+          loop do
+            return if shutdown
+            remaining = next_sweep - monotonic_now
+            break if !remaining.positive?
+            wait_cv.wait(state_lock, remaining)
+          end
+        end
+
+        sweep!
+        next_sweep = monotonic_now + SWEEP_INTERVAL
+      end
+    end
+
+    def start_wait_expiry_thread
+      self.wait_expiry_thread = Thread.new { wait_expiry_loop }
+      wait_expiry_thread.report_on_exception = false
+    end
+
+    def wait_expiry_loop
+      loop do
+        expired_calls = state_lock.synchronize do
+          loop do
+            return if shutdown
+
+            now = monotonic_now
+            self.next_wait_deadline ||= next_wait_deadline_locked
+            if !next_wait_deadline
+              wait_cv.wait(state_lock)
+              next
+            end
+
+            remaining = next_wait_deadline - now
+            if remaining.positive?
+              wait_cv.wait(state_lock, remaining)
+              next
+            end
+
+            calls = expire_wait_calls_locked(now)
+            self.next_wait_deadline = nil
+            break(calls)
+          end
+        end
+
+        synthesize_wait_expired_calls(expired_calls)
+      end
+    end
+
+    def monotonic_now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
+    def next_wait_deadline_locked
+      wait_calls_by_id.values.filter_map do |call|
+        active_ids.key?(call.id) ? call.wait_deadline : nil
+      end.min
+    end
+
+    def expire_wait_calls_locked(now)
+      expired_calls = []
+      stale_ids = []
+      wait_calls_by_id.each_value do |call|
+        if !active_ids.key?(call.id)
+          stale_ids << call.id
+          next
+        end
+
+        next if !call.wait_deadline || call.wait_deadline > now
+        expired_calls << call
+      end
+
+      stale_ids.each { wait_calls_by_id.delete(it) }
+      expired_calls.each do |call|
+        wait_calls_by_id.delete(call.id)
+        active_ids.delete(call.id)
+      end
+      expired_calls.map(&:rpc_key).uniq.each do |key|
+        compact_queue_locked(key) if backend_count_locked(key) == 0
+      end
+      expired_calls
+    end
+
+    def compact_queue_locked(key)
+      q = queues_by_key[key]
+      return if !q
+
+      survivors = []
+      loop do
+        begin
+          call = q.pop(true)
+        rescue ThreadError
+          break
+        end
+        break if !call
+        survivors << call if active_ids.key?(call.id)
+      end
+
+      if survivors.empty?
+        queues_by_key.delete(key)
+      else
+        new_q = Queue.new
+        survivors.each { new_q << it }
+        queues_by_key[key] = new_q
+      end
     end
 
     def sweep!(expiry: RESPONSE_EXPIRY)
@@ -353,6 +461,7 @@ module Urpc
     end
 
     def process_submission(id)
+      received_at = monotonic_now
       request_call =
         begin
           Call.load(id)
@@ -376,7 +485,7 @@ module Urpc
 
       broadcast_monitor_call(call)
 
-      if !enqueue_submitted_call(call) && !call.cast?
+      if !enqueue_submitted_call(call, received_at:) && !call.cast?
         synthesize_call_error(call, Urpc::NoServerError, "no server registered for #{call.rpc_key}")
       end
     rescue => e
@@ -388,10 +497,16 @@ module Urpc
       end
     end
 
-    def enqueue_submitted_call(call)
+    def enqueue_submitted_call(call, received_at:)
       state_lock.synchronize do
         can_enqueue = backend_count_locked(call.rpc_key) > 0 || call.wait_for_server?
-        enqueue_call_locked(call) if can_enqueue
+        if can_enqueue
+          if (seconds = call.wait_for_server_seconds)
+            call.wait_deadline = received_at + seconds
+            track_wait_call_locked(call)
+          end
+          enqueue_call_locked(call)
+        end
         can_enqueue
       end
     end
@@ -399,6 +514,46 @@ module Urpc
     def enqueue_call_locked(call)
       active_ids[call.id] = call.rpc_key
       (queues_by_key[call.rpc_key] ||= Queue.new) << call
+    end
+
+    def track_wait_call_locked(call)
+      wait_calls_by_id[call.id] = call
+      return if next_wait_deadline && call.wait_deadline >= next_wait_deadline
+      self.next_wait_deadline = call.wait_deadline
+      wait_cv.broadcast
+    end
+
+    def untrack_wait_call_locked(call)
+      return if !wait_calls_by_id.delete(call.id)
+      return if !call.wait_deadline || call.wait_deadline != next_wait_deadline
+      self.next_wait_deadline = nil
+      wait_cv.broadcast
+    end
+
+    def claim_call_for_dispatch(call)
+      expired_call = nil
+      claimed = state_lock.synchronize do
+        if !active_ids.key?(call.id)
+          false
+        elsif call.wait_deadline && call.wait_deadline <= monotonic_now
+          untrack_wait_call_locked(call)
+          active_ids.delete(call.id)
+          expired_call = call
+          false
+        else
+          untrack_wait_call_locked(call)
+          true
+        end
+      end
+
+      synthesize_wait_expired_calls([expired_call]) if expired_call
+      claimed
+    end
+
+    def mark_call_dispatched(call)
+      state_lock.synchronize do
+        untrack_wait_call_locked(call)
+      end
     end
 
     def synthesize_error_reply(id, exception_class, message)
@@ -497,12 +652,22 @@ module Urpc
 
     def backend_dispatch_failed(backend, call)
       key = backend.key
+      expired_calls = []
       failed_calls = state_lock.synchronize do
         remove_backend_locked(backend)
-        enqueue_call_locked(call)
-        drain_queued_calls_if_no_backends_locked(key)
+        if call.wait_deadline && call.wait_deadline <= monotonic_now
+          untrack_wait_call_locked(call)
+          active_ids.delete(call.id)
+          expired_calls << call
+          []
+        else
+          track_wait_call_locked(call) if call.wait_deadline
+          enqueue_call_locked(call)
+          drain_queued_calls_if_no_backends_locked(key)
+        end
       end
 
+      synthesize_wait_expired_calls(expired_calls)
       synthesize_no_server_for_drained_calls(key, failed_calls)
     end
 
@@ -519,6 +684,7 @@ module Urpc
       q = queues_by_key.delete(key)
       failed_calls = []
       waiting_calls = []
+      now = monotonic_now
       loop do
         begin
           call = q&.pop(true)
@@ -527,9 +693,14 @@ module Urpc
         end
         break if !call
 
-        if call.wait_for_server?
+        if call.wait_deadline && call.wait_deadline <= now
+          untrack_wait_call_locked(call)
+          active_ids.delete(call.id)
+          failed_calls << call
+        elsif call.wait_for_server?
           waiting_calls << call
         else
+          untrack_wait_call_locked(call)
           active_ids.delete(call.id)
           failed_calls << call
         end
@@ -547,18 +718,41 @@ module Urpc
     def synthesize_no_server_for_drained_calls(key, calls)
       calls.each do |call|
         if !call.cast?
-          synthesize_call_error(call, Urpc::NoServerError, "no server registered for #{key}")
+          if call.wait_deadline && call.wait_deadline <= monotonic_now
+            synthesize_wait_expired_calls([call])
+          else
+            synthesize_call_error(call, Urpc::NoServerError, "no server registered for #{key}")
+          end
         end
       end
     end
 
+    def synthesize_wait_expired_calls(calls)
+      calls.compact.each do |call|
+        next if call.cast?
+        seconds = call.wait_for_server_seconds
+        message = if seconds
+          "no server registered for #{call.rpc_key} after #{seconds}s"
+        else
+          "no server registered for #{call.rpc_key}"
+        end
+        synthesize_call_error(call, Urpc::NoServerError, message)
+      end
+    end
+
     def abandon_call(call)
-      remove_active(call.id)
+      state_lock.synchronize do
+        untrack_wait_call_locked(call)
+        active_ids.delete(call.id)
+      end
       call.abandon!
     end
 
     def finish_call(call)
-      remove_active(call.id)
+      state_lock.synchronize do
+        untrack_wait_call_locked(call)
+        active_ids.delete(call.id)
+      end
       call.finish!
     end
   end

@@ -30,6 +30,8 @@ module Urpc
     end
 
     def process(call)
+      return if !broker.claim_call_for_dispatch(call)
+
       if !call.ensure_reply_open
         broker.abandon_call(call)
         return
@@ -40,6 +42,7 @@ module Urpc
       call_reclaimed = false
       begin
         sock.write(MessagePack.pack(call.to_backend_request))
+        broker.mark_call_dispatched(call)
         dispatched = true
 
         loop do

@@ -49,10 +49,12 @@ module Urpc
 
         def write_response(type, value)
           io.write(Frames.pack(type, value))
+          io.flush
         end
 
         def write_error(exception)
           io.write(Frames.pack_error(exception))
+          io.flush
         end
       end
 
@@ -65,12 +67,14 @@ module Urpc
 
         def write_response(type, value)
           io.write(Frames.pack(type, value))
+          io.flush
         rescue Errno::EPIPE
           nil
         end
 
         def write_error(exception)
           io.write(Frames.pack_error(exception))
+          io.flush
         rescue Errno::EPIPE
           nil
         end

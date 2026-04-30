@@ -2,7 +2,7 @@
 
 module Urpc
   class BrokerCall
-    attr_accessor(:call, :reply_io)
+    attr_accessor(:call, :reply_io, :wait_deadline)
 
     def initialize(call:)
       self.call = call
@@ -16,6 +16,7 @@ module Urpc
     def reply_path = call.reply_path
     def cast? = call.cast?
     def wait_for_server? = call.wait_for_server?
+    def wait_for_server_seconds = call.wait_for_server_seconds
     def to_backend_request = call.to_backend_request
 
     def wanted?
@@ -37,6 +38,7 @@ module Urpc
     def write_reply_frame(frame)
       return if !reply_io
       reply_io.write(MessagePack.pack(frame))
+      reply_io.flush
     rescue Errno::EPIPE
       close_reply_io
     end

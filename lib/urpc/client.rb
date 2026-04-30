@@ -67,7 +67,7 @@ module Urpc
           return [ready_stream, event]
         end
         ios = active.map(&:reply_io)
-        ready, = IO.select(ios, nil, nil, io_select_timeout)
+        ready, = IO.select(ios, nil, nil, select_timeout_for_streams(active))
         raise(TimeoutException) if !ready
         ready.each do |io|
           s = active.find {|x| x.reply_io == io }
@@ -113,6 +113,28 @@ module Urpc
 
     def io_select_timeout
       timeout == 0 ? nil : timeout
+    end
+
+    def wait_for_server_seconds
+      Call.wait_for_server_seconds(wait_for_server)
+    end
+
+    def initial_response_timeout
+      return if timeout == 0
+      seconds = wait_for_server_seconds
+      seconds ? timeout + seconds : timeout
+    end
+
+    def initial_response_deadline
+      return if !wait_for_server_seconds
+      initial_timeout = initial_response_timeout
+      return if !initial_timeout
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) + initial_timeout
+    end
+
+    def select_timeout_for_streams(streams)
+      timeouts = streams.map(&:current_wait_timeout).compact
+      timeouts.empty? ? nil : timeouts.min
     end
 
     def hydrate_error(data)

@@ -229,4 +229,32 @@ class UrpcStreamingTest < Minitest::Test
       assert_equal("slow-done", client.call(:slow, 200))
     end
   end
+
+  def test_wait_for_server_numeric_only_extends_initial_stream_wait
+    with_broker do
+      gate = Queue.new
+      handler = Object.new
+      handler.singleton_class.define_method(:delayed_gap) do |req|
+        sleep(0.35)
+        req.stream.data("first")
+        gate.pop
+        req.stream.data("second")
+        req.stream.return("done")
+      end
+
+      start_stream_server("stream_initial_wait", handler)
+      wait_for_backend("stream_initial_wait")
+
+      client = Urpc::Client.new("stream_initial_wait", timeout: 0.2, wait_for_server: 1)
+      stream = client.stream(:delayed_gap)
+      _s, event = client.next_event(stream)
+      assert_equal(:data, event.type)
+      assert_equal("first", event.data)
+
+      assert_raises(Urpc::TimeoutException) { client.next_event(stream) }
+    ensure
+      gate << true rescue nil
+      stream&.close rescue nil
+    end
+  end
 end

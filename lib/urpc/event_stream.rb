@@ -4,7 +4,7 @@ module Urpc
   class EventStream
     READ_CHUNK = 65_536
 
-    attr_accessor(:client, :call, :reply_io, :unpacker, :pending, :had_data, :is_finished, :result_value, :error_value)
+    attr_accessor(:client, :call, :reply_io, :unpacker, :pending, :had_data, :is_finished, :result_value, :error_value, :initial_response_deadline)
 
     def initialize(client:, method_name:, args:, kargs:)
       self.client = client
@@ -28,6 +28,7 @@ module Urpc
         Util.clear_nonblock(reply_io)
         call.write_request_file!
         client.submit(call.id)
+        self.initial_response_deadline = client.initial_response_deadline
       rescue
         cleanup
         raise
@@ -94,6 +95,13 @@ module Urpc
       :ok
     end
 
+    def current_wait_timeout
+      return client.io_select_timeout if had_data
+      return client.io_select_timeout if !initial_response_deadline
+      remaining = initial_response_deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      remaining.positive? ? remaining : 0
+    end
+
     def handle_event(event)
       case event.type
       when :return
@@ -110,7 +118,7 @@ module Urpc
     def await_event
       loop do
         return consume_pending if has_pending?
-        raise(TimeoutException) if !reply_io.wait_readable(client.io_select_timeout)
+        raise(TimeoutException) if !reply_io.wait_readable(current_wait_timeout)
         fill_buffer_once
       end
     end

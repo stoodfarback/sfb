@@ -7,6 +7,7 @@ module Urpc
     attr_accessor(:id, :rpc_key, :name, :args, :kargs, :cast, :wait_for_server)
 
     def initialize(id:, rpc_key:, name:, args:, kargs:, cast:, wait_for_server: false)
+      raise(ArgumentError, "invalid wait_for_server: #{wait_for_server.inspect}") if !self.class.valid_wait_for_server?(wait_for_server)
       self.id = id
       self.rpc_key = rpc_key
       self.name = name
@@ -21,7 +22,11 @@ module Urpc
     end
 
     def wait_for_server?
-      wait_for_server
+      wait_for_server == true || !!wait_for_server_seconds
+    end
+
+    def wait_for_server_seconds
+      self.class.wait_for_server_seconds(wait_for_server)
     end
 
     def request_path
@@ -87,7 +92,24 @@ module Urpc
         hash[:args].is_a?(Array) &&
         hash[:kargs].is_a?(Hash) &&
         [true, false].include?(hash[:cast]) &&
-        [true, false].include?(hash[:wait_for_server])
+        valid_wait_for_server?(hash[:wait_for_server])
+    end
+
+    def self.valid_wait_for_server?(value)
+      return true if [true, false].include?(value)
+      return false if !value.is_a?(Numeric)
+      return false if value.respond_to?(:nan?) && value.nan?
+      return false if value.respond_to?(:infinite?) && value.infinite?
+      value >= 0
+    rescue ArgumentError
+      false
+    end
+
+    def self.wait_for_server_seconds(value)
+      return if !valid_wait_for_server?(value)
+      return if !value.is_a?(Numeric)
+      return if value <= 0
+      value
     end
   end
 end

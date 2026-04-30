@@ -28,10 +28,14 @@ module Urpc
     end
 
     def process(call)
+      return if !broker.claim_call_for_dispatch(call)
+
       if !call.ensure_reply_open
         broker.abandon_call(call)
         return
       end
+
+      broker.mark_call_dispatched(call)
 
       sink = call.cast? ? ResponseStream::Sinks::Null.new : ResponseStream::Sinks::Fifo.new(call.reply_io)
       sink = MonitorSink.new(sink: sink, broker: broker, call: call)
