@@ -18,6 +18,14 @@ module Urpc
         o.on("-c", "--cast") { cast = true }
         o.on("-s", "--stream") { stream = true }
         o.on("-f", "--format FORMAT", %i[inspect json raw]) {|v| fmt = v }
+        o.separator("")
+        o.separator("examples:")
+        o.separator("  urpc-call svc status")
+        o.separator("  urpc-call svc search hello limit=10 verbose=true")
+        o.separator('  urpc-call svc \'search("hello", limit: 10)\'')
+        o.separator("  urpc-call --cast svc record cast-1")
+        o.separator("  urpc-call --stream svc slow_emit X")
+        o.separator("  urpc-call -f json svc echo_args x")
       end
       parser.order!
 
