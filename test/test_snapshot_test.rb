@@ -4,6 +4,8 @@ require_relative("test_helper")
 require("stringio")
 
 class TestSnapshotTest < Minitest::Test
+  skip_output_capture_for(self)
+
   def with_sandbox
     Dir.mktmpdir("sfb_snapshot_test_") do |dir|
       @sandbox = Pathname(dir)

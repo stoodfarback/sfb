@@ -38,6 +38,7 @@ module Sfb::Test::Snapshot
 
     def setup!(dir: "test/fixtures/snapshots", skip_common_gsubs: false)
       require("minitest/test")
+      Sfb::Test::ImmediateWarn.setup!
       self.fixtures_dir = dir
       self.gsubs = skip_common_gsubs ? [] : COMMON_GSUBS.deep_dup
       Minitest::Test.include(self)
@@ -100,7 +101,7 @@ module Sfb::Test::Snapshot
     if !File.exist?(fixture_path)
       FileUtils.mkdir_p(File.dirname(fixture_path))
       File.write(fixture_path, serialized)
-      warn("\n\e[1;33mCreated new snapshot:\e[0m #{fixture_path}")
+      immediate_warn("\n\e[1;33mCreated new snapshot:\e[0m #{fixture_path}")
       return(pass)
     end
 
@@ -113,7 +114,7 @@ module Sfb::Test::Snapshot
     end
 
     File.write(fixture_path, serialized)
-    warn("\n\e[1;33mSnapshot changed:\e[0m #{fixture_path}")
+    immediate_warn("\n\e[1;33mSnapshot changed:\e[0m #{fixture_path}")
     pass
   end
 

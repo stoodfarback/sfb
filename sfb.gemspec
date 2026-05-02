@@ -30,6 +30,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency("actionview")
   spec.add_dependency("activesupport", ">= 6.0")
   spec.add_dependency("base32-crockford")
+  spec.add_dependency("fiddle")
   spec.add_dependency("http")
   spec.add_dependency("nokogiri")
   spec.add_dependency("oj")
