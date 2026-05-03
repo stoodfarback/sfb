@@ -66,6 +66,18 @@ class TestRunnerTest < Minitest::Test
     assert_match(%r{Usage: bin/test}, output)
   end
 
+  def test_no_tests_in_project
+    stdout, stderr, status = Open3.capture3(
+      "bundle", "exec", "ruby", "-Ilib", "-rsfb", "-e",
+      'Sfb::TestRunner.run(file_pattern: "test/fixture/empty_dir/*_test.rb")',
+    )
+    output = stdout + stderr
+    refute(status.success?)
+    assert_match(%r{No tests found in test/fixture/empty_dir/\*_test\.rb}, output)
+    refute_match(/No tests matched/, output)
+    refute_match(%r{Usage: bin/test}, output)
+  end
+
   def test_multiple_patterns_default_or
     # 'alpha' matches 2 tests, 'beta' matches 2 tests. Total 4.
     output, status = run_fixture("alpha", "beta")

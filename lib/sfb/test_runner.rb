@@ -65,16 +65,19 @@ module Sfb
         available_tests
       end
 
+      if available_tests.empty?
+        puts("No tests found in #{file_pattern}")
+        exit(1)
+      end
+
       if all_tests.empty?
         puts("No tests matched: #{patterns.join(", ")}")
         puts
-        if available_tests.any?
-          puts("Available tests (first 3):")
-          available_tests.first(3).each do |klass, method, file|
-            puts("  #{file} #{klass}##{method}")
-          end
-          puts
+        puts("Available tests (first 3):")
+        available_tests.first(3).each do |klass, method, file|
+          puts("  #{file} #{klass}##{method}")
         end
+        puts
         puts("Usage: bin/test [options] [pattern ...]")
         puts("  Patterns filter by file path, class name, or method name (case-insensitive)")
         puts("  Multiple patterns use OR logic (any must match)")
