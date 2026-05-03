@@ -1,0 +1,10 @@
+Run options: --verbose --seed <SEED>
+
+# Running:
+
+AlphaTest#test_one = <TIME> s = .
+AlphaTest#test_two = <TIME> s = .
+
+Finished in <TIME>s, <RATE> runs/s, <RATE> assertions/s.
+
+2 runs, 2 assertions, 0 failures, 0 errors, 0 skips

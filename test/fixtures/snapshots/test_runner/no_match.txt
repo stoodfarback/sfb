@@ -1,0 +1,18 @@
+No tests matched: nonexistent
+
+Available tests (first 3):
+  test/alpha_test.rb AlphaTest#test_one
+  test/alpha_test.rb AlphaTest#test_two
+  test/beta_test.rb BetaTest#test_first
+
+Usage: bin/test [options] [pattern ...]
+  Patterns filter by file path, class name, or method name (case-insensitive)
+  Multiple patterns use OR logic (any must match)
+  --match-all  Switch to AND logic for multiple patterns
+  -l, --list   List matching tests without running them
+
+Examples:
+  bin/test session              # run tests with 'session' in file/class/method
+  bin/test util kv              # run tests matching 'util' OR 'kv'
+  bin/test --match-all session basic # run tests matching both 'session' AND 'basic'
+  bin/test -l                   # list all tests

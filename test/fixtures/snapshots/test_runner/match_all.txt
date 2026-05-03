@@ -1,0 +1,9 @@
+Run options: --seed <SEED>
+
+# Running:
+
+.
+
+Finished in <TIME>s, <RATE> runs/s, <RATE> assertions/s.
+
+1 runs, 1 assertions, 0 failures, 0 errors, 0 skips
