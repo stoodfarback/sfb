@@ -481,11 +481,11 @@ module Urpc
         return
       end
 
-      call = BrokerCall.new(call: request_call)
+      call = BrokerCall.new(call: request_call, received_at:)
 
       broadcast_monitor_call(call)
 
-      if !enqueue_submitted_call(call, received_at:) && !call.cast?
+      if !enqueue_submitted_call(call) && !call.cast?
         synthesize_call_error(call, Urpc::NoServerError, "no server registered for #{call.rpc_key}")
       end
     rescue => e
@@ -497,18 +497,26 @@ module Urpc
       end
     end
 
-    def enqueue_submitted_call(call, received_at:)
+    def enqueue_submitted_call(call)
       state_lock.synchronize do
-        can_enqueue = backend_count_locked(call.rpc_key) > 0 || call.wait_for_server?
+        has_backend = backend_count_locked(call.rpc_key) > 0
+        can_enqueue = has_backend || call.wait_for_server?
         if can_enqueue
-          if (seconds = call.wait_for_server_seconds)
-            call.wait_deadline = received_at + seconds
-            track_wait_call_locked(call)
-          end
+          start_wait_budget_if_needed_locked(call) if !has_backend
           enqueue_call_locked(call)
         end
         can_enqueue
       end
+    end
+
+    def start_wait_budget_if_needed_locked(call)
+      return if call.wait_deadline
+      return if !call.wait_for_server?
+      seconds = call.wait_for_server_seconds
+      return if !seconds
+
+      call.wait_deadline = call.received_at + seconds
+      track_wait_call_locked(call)
     end
 
     def enqueue_call_locked(call)
@@ -692,6 +700,8 @@ module Urpc
           break
         end
         break if !call
+
+        start_wait_budget_if_needed_locked(call)
 
         if call.wait_deadline && call.wait_deadline <= now
           untrack_wait_call_locked(call)

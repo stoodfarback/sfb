@@ -468,6 +468,130 @@ class UrpcFailuresTest < Minitest::Test
     end
   end
 
+  def test_wait_for_server_numeric_does_not_expire_when_backend_is_busy
+    with_broker do
+      gate = Queue.new
+      handler = Object.new
+      handler.singleton_class.define_method(:slow) do |x|
+        gate.pop
+        x
+      end
+      handler.singleton_class.define_method(:echo) {|x| x }
+
+      start_server("wait_busy_backend", handler)
+      wait_for_backend("wait_busy_backend")
+
+      busy_thread = Thread.new do
+        Urpc::Client.new("wait_busy_backend", timeout: 5).call(:slow, "first")
+      end
+
+      raise("busy call did not start") if !poll_until {
+        @broker.state_lock.synchronize { @broker.in_flight_by_key["wait_busy_backend"] == 1 }
+      }
+
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      second_thread = Thread.new do
+        Urpc::Client.new("wait_busy_backend", timeout: 3, wait_for_server: 0.2).call(:echo, "second")
+      end
+
+      raise("second call was not queued") if !poll_until {
+        @broker.state_lock.synchronize { (@broker.queues_by_key["wait_busy_backend"]&.size || 0) == 1 }
+      }
+
+      assert_equal(0, @broker.state_lock.synchronize { @broker.wait_calls_by_id.size })
+
+      sleep(0.4)
+      gate << true
+      assert_equal("first", busy_thread.value)
+      assert_equal("second", second_thread.value)
+
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+      assert_operator(elapsed, :>=, 0.4)
+    ensure
+      busy_thread&.kill rescue nil
+      second_thread&.kill rescue nil
+    end
+  end
+
+  def test_wait_for_server_numeric_starts_budget_when_only_backend_disappears
+    with_broker do
+      gate = Queue.new
+      handler = Object.new
+      handler.singleton_class.define_method(:slow) do |x|
+        gate.pop
+        x
+      end
+      handler.singleton_class.define_method(:echo) {|x| x }
+
+      start_server("wait_disappears", handler)
+      wait_for_backend("wait_disappears")
+
+      busy_thread = Thread.new do
+        Urpc::Client.new("wait_disappears", timeout: 5).call(:slow, "busy") rescue nil
+      end
+
+      raise("busy call did not start") if !poll_until {
+        @broker.state_lock.synchronize { @broker.in_flight_by_key["wait_disappears"] == 1 }
+      }
+
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      victim_thread = Thread.new do
+        Urpc::Client.new("wait_disappears", timeout: 5, wait_for_server: 0.3).call(:echo, "victim")
+      rescue => e
+        e
+      end
+
+      raise("victim was not queued") if !poll_until {
+        @broker.state_lock.synchronize { (@broker.queues_by_key["wait_disappears"]&.size || 0) == 1 }
+      }
+
+      @broker.state_lock.synchronize do
+        (@broker.backends_by_key["wait_disappears"] || []).each { it.sock.close rescue nil }
+      end
+
+      result = victim_thread.value
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+
+      assert_kind_of(Urpc::NoServerError, result)
+      assert_operator(elapsed, :>=, 0.2)
+      assert_operator(elapsed, :<, 1.5)
+    ensure
+      gate << true rescue nil
+      busy_thread&.kill rescue nil
+      victim_thread&.kill rescue nil
+    end
+  end
+
+  def test_wait_for_server_numeric_budget_anchored_to_received_at_in_drain
+    broker = Urpc::Broker.new
+    backend = Object.new
+    backend.define_singleton_method(:key) { "wait_anchor" }
+
+    request_call = Urpc::Call.new(
+      id: SecureRandom.hex(16),
+      rpc_key: "wait_anchor",
+      name: :echo,
+      args: ["x"],
+      kargs: {},
+      cast: true,
+      wait_for_server: 0.3,
+    )
+    broker_call = Urpc::BrokerCall.new(call: request_call, received_at: broker.monotonic_now - 1.0)
+
+    drained = broker.state_lock.synchronize do
+      broker.backends_by_key["wait_anchor"] = [backend]
+      broker.active_ids[broker_call.id] = "wait_anchor"
+      (broker.queues_by_key["wait_anchor"] ||= Queue.new) << broker_call
+
+      broker.remove_backend_locked(backend)
+      broker.drain_queued_calls_if_no_backends_locked("wait_anchor")
+    end
+
+    assert_equal(1, drained.size)
+    assert_equal(broker_call.id, drained.first.id)
+    assert_in_delta(broker_call.received_at + 0.3, broker_call.wait_deadline, 0.001)
+  end
+
   def test_wait_expiry_recomputes_after_earliest_deadline_removed
     with_broker do
       handler = echo_handler

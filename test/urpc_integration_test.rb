@@ -73,6 +73,8 @@ class UrpcIntegrationTest < Minitest::Test
       assert(File.pipe?(Urpc.submit_fifo))
       st = Urpc::Client.new("urpc", timeout: 1).call(:stats)
       assert_kind_of(Hash, st)
+    ensure
+      teardown_process(broker_pid)
     end
   end
 
@@ -123,6 +125,8 @@ class UrpcIntegrationTest < Minitest::Test
     ensure
       s1&.close rescue nil
       s2&.close rescue nil
+      [@server_pid_basic, @server_pid_a, @server_pid_b].each { teardown_process(it) }
+      teardown_process(broker_pid)
     end
   end
 

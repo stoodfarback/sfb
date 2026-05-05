@@ -2,10 +2,11 @@
 
 module Urpc
   class BrokerCall
-    attr_accessor(:call, :reply_io, :wait_deadline)
+    attr_accessor(:call, :reply_io, :wait_deadline, :received_at)
 
-    def initialize(call:)
+    def initialize(call:, received_at:)
       self.call = call
+      self.received_at = received_at
     end
 
     def id = call.id
