@@ -204,10 +204,11 @@ module Sfb::Test::OutputCapture
     printable = buffer.dup
     printable.force_encoding(Encoding::UTF_8)
     printable = printable.scrub("?")
+    return if printable.empty?
 
     $stderr.puts("--- Captured output from #{self.class}##{name} ---")
     $stderr.write(printable)
-    $stderr.puts if printable.length > 0 && !printable.end_with?("\n")
+    $stderr.puts if !printable.end_with?("\n")
     $stderr.puts("--- End captured output ---")
     nil
   end

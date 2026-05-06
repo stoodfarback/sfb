@@ -66,6 +66,23 @@ class TestOutputCaptureTest < Minitest::Test
     assert_includes(stderr, "--- End captured output ---")
   end
 
+  def test_silent_failing_test_omits_capture_brackets
+    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+      require("minitest/autorun")
+      Sfb::Test::OutputCapture.setup!
+
+      class SilentFailingOutputCaptureChildTest < Minitest::Test
+        def test_silent_failure
+          flunk("boom")
+        end
+      end
+    RUBY
+
+    refute(status.success?, combined_output(stdout, stderr))
+    refute_includes(stderr, "--- Captured output from")
+    refute_includes(stderr, "--- End captured output ---")
+  end
+
   def test_stdout_and_stderr_share_ordered_capture_buffer
     stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
       require("minitest/autorun")
