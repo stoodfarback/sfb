@@ -1,7 +1,5 @@
 # URPC Bidirectional Handlers
 
-Status: proposed design.
-
 ## Purpose
 
 URPC streaming calls currently support server-to-client events through `Urpc::StreamServer`: a server handler receives a `Urpc::Req`, writes `:data` frames, then finishes with `:return` or `:error`.

@@ -61,11 +61,16 @@ class UrpcStreamingTest < Minitest::Test
 
   def test_inbox_response_is_internal_to_event_stream
     with_broker do
+      handler_class = Class.new(Urpc::BidirectionalHandler) do
+        def run!
+          data("visible")
+          finish("done")
+        end
+      end
+
       handler = Object.new
       handler.define_singleton_method(:hello) do |req|
-        req.stream.write_response(:inbox, "/tmp/urpc-inbox")
-        req.stream.data("visible")
-        req.stream.return("done")
+        req.handle_bidirectional!(handler_class)
       end
       start_stream_server("event_stream_inbox", handler)
       wait_for_backend("event_stream_inbox")
@@ -85,11 +90,16 @@ class UrpcStreamingTest < Minitest::Test
 
   def test_inbox_response_is_internal_to_multiplexed_client_events
     with_broker do
+      handler_class = Class.new(Urpc::BidirectionalHandler) do
+        def run!
+          data("visible")
+          finish("done")
+        end
+      end
+
       handler = Object.new
       handler.define_singleton_method(:hello) do |req|
-        req.stream.write_response(:inbox, "/tmp/urpc-inbox")
-        req.stream.data("visible")
-        req.stream.return("done")
+        req.handle_bidirectional!(handler_class)
       end
       start_stream_server("client_inbox", handler)
       wait_for_backend("client_inbox")

@@ -135,6 +135,7 @@ module Urpc
 
       clean_dir(Urpc.requests_dir)
       clean_dir(Urpc.replies_dir)
+      clean_dir(Urpc.inboxes_dir)
       remove_stale(Urpc.broker_sock)
       remove_stale(Urpc.monitor_sock)
       remove_stale(Urpc.in_fifo)

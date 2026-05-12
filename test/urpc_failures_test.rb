@@ -147,6 +147,10 @@ class UrpcFailuresTest < Minitest::Test
     assert(Urpc::Frames.valid_response_frame?(Urpc::Frames.frame(:inbox, "/tmp/urpc-inbox")))
     refute(Urpc::Frames.valid_response_frame?(Urpc::Frames.frame(:sync, "value")))
     refute(Urpc::Frames.valid_response_frame?(Urpc::Frames.frame(:async, "value")))
+    assert(Urpc::Frames.valid_inbox_frame?(Urpc::Frames.frame(:sync, "value")))
+    assert(Urpc::Frames.valid_inbox_frame?(Urpc::Frames.frame(:async, "value")))
+    refute(Urpc::Frames.valid_inbox_frame?(Urpc::Frames.frame(:inbox, "/tmp/urpc-inbox")))
+    refute(Urpc::Frames.valid_inbox_frame?(Urpc::Frames.frame(:return, "value")))
   end
 
   def test_null_response_stream_ignores_unencodable_values

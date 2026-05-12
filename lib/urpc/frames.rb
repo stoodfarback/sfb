@@ -3,7 +3,6 @@
 module Urpc
   module Frames
     RESPONSE_TYPES = %i[data return error inbox].freeze
-    TYPES = RESPONSE_TYPES
     INBOX_TYPES = %i[sync async].freeze
     TERMINAL_TYPES = %i[return error].freeze
 
@@ -41,8 +40,15 @@ module Urpc
     def self.valid_response_frame?(frame)
       return false if !frame.is_a?(Array) || frame.size != 2
       type, payload = frame
-      return false if !TYPES.include?(type)
+      return false if !RESPONSE_TYPES.include?(type)
       return valid_error_payload?(payload) if type == :error
+      valid_payload?(payload)
+    end
+
+    def self.valid_inbox_frame?(frame)
+      return false if !frame.is_a?(Array) || frame.size != 2
+      type, payload = frame
+      return false if !INBOX_TYPES.include?(type)
       valid_payload?(payload)
     end
 

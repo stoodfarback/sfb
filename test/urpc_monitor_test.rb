@@ -64,10 +64,15 @@ class UrpcMonitorTest < Minitest::Test
 
   def test_monitor_receives_inbox_response
     with_broker do
+      handler_class = Class.new(Urpc::BidirectionalHandler) do
+        def run!
+          finish("done")
+        end
+      end
+
       handler = Object.new
       handler.define_singleton_method(:hello) do |req|
-        req.stream.write_response(:inbox, "/tmp/urpc-inbox")
-        req.stream.return("done")
+        req.handle_bidirectional!(handler_class)
       end
       start_stream_server("monitor_inbox_test", handler)
       wait_for_backend("monitor_inbox_test", count: 1)
@@ -83,7 +88,7 @@ class UrpcMonitorTest < Minitest::Test
       lines = Timeout.timeout(2) { 3.times.map { sock.gets } }
 
       assert_match(/\A\[.*\] \[.{8}\] CALL monitor_inbox_test #hello\(\)\n\z/, lines[0])
-      assert_match(%r{\A\[.*\] \{.{8}\} INB "/tmp/urpc-inbox"\n\z}, lines[1])
+      assert_match(%r{\A\[.*\] \{.{8}\} INB ".*/inboxes/[a-f0-9]{32}\.fifo"\n\z}, lines[1])
       assert_match(/\A\[.*\] \{.{8}\} RET "done"\n\z/, lines[2])
 
       sock.close rescue nil

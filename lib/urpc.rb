@@ -4,12 +4,15 @@ module Urpc
   autoload(:Backend, "urpc/backend")
   autoload(:Broker, "urpc/broker")
   autoload(:BrokerCall, "urpc/broker_call")
+  autoload(:BidirectionalHandler, "urpc/bidirectional_handler")
   autoload(:Call, "urpc/call")
+  autoload(:CallHandler, "urpc/call_handler")
   autoload(:CliCall, "urpc/cli_call")
   autoload(:Client, "urpc/client")
   autoload(:Event, "urpc/event")
   autoload(:EventStream, "urpc/event_stream")
   autoload(:Frames, "urpc/frames")
+  autoload(:Inbox, "urpc/inbox")
   autoload(:InternalBackend, "urpc/internal_backend")
   autoload(:Introspection, "urpc/introspection")
   autoload(:MonitorSink, "urpc/monitor_sink")
@@ -35,6 +38,7 @@ module Urpc
   def self.in_fifo = File.join(root, "in.fifo")
   def self.requests_dir = File.join(root, "requests")
   def self.replies_dir = File.join(root, "replies")
+  def self.inboxes_dir = File.join(root, "inboxes")
 
   ID_RE = /\A[a-f0-9]{32}\z/
   RESERVED_KEY = "urpc"
