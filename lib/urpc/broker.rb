@@ -16,7 +16,7 @@ module Urpc
     }.freeze
 
     attr_accessor(:queues_by_key, :backends_by_key, :in_flight_by_key, :active_ids, :wait_calls_by_id, :wait_cv, :next_wait_deadline,
-      :internal_backends_by_key, :state_lock, :submit_read, :submit_dummy_write,
+      :internal_backends_by_key, :state_lock, :in_read, :in_dummy_write,
       :sock_server, :reader_thread, :accept_thread, :sweeper_thread, :wait_expiry_thread, :shutdown, :stopped, :broker_lock, :owns_broker_lock, :filesystem_ready,
       :monitor_server, :monitor_accept_thread, :monitors)
 
@@ -39,7 +39,7 @@ module Urpc
 
     def run
       setup_filesystem
-      open_submit_fifo
+      open_in_fifo
       open_broker_sock
       register_introspection_backend
       start_reader_thread
@@ -64,8 +64,8 @@ module Urpc
         nil
       end
 
-      submit_dummy_write&.close rescue nil
-      submit_read&.close rescue nil
+      in_dummy_write&.close rescue nil
+      in_read&.close rescue nil
       sock_server&.close rescue nil
       monitor_server&.close rescue nil
 
@@ -95,7 +95,7 @@ module Urpc
       if owns_broker_lock && filesystem_ready
         remove_stale(Urpc.broker_sock)
         remove_stale(Urpc.monitor_sock)
-        remove_stale(Urpc.submit_fifo)
+        remove_stale(Urpc.in_fifo)
       end
 
       broker_lock&.close rescue nil
@@ -136,8 +136,8 @@ module Urpc
       clean_dir(Urpc.replies_dir)
       remove_stale(Urpc.broker_sock)
       remove_stale(Urpc.monitor_sock)
-      remove_stale(Urpc.submit_fifo)
-      File.mkfifo(Urpc.submit_fifo)
+      remove_stale(Urpc.in_fifo)
+      File.mkfifo(Urpc.in_fifo)
 
       self.filesystem_ready = true
     end
@@ -154,11 +154,11 @@ module Urpc
       Dir.children(dir).each {|child| File.unlink(File.join(dir, child)) rescue nil }
     end
 
-    def open_submit_fifo
-      self.submit_read = File.open(Urpc.submit_fifo, File::RDONLY | File::NONBLOCK)
-      self.submit_dummy_write = File.open(Urpc.submit_fifo, File::WRONLY)
-      flags = submit_read.fcntl(Fcntl::F_GETFL)
-      submit_read.fcntl(Fcntl::F_SETFL, flags & ~File::NONBLOCK)
+    def open_in_fifo
+      self.in_read = File.open(Urpc.in_fifo, File::RDONLY | File::NONBLOCK)
+      self.in_dummy_write = File.open(Urpc.in_fifo, File::WRONLY)
+      flags = in_read.fcntl(Fcntl::F_GETFL)
+      in_read.fcntl(Fcntl::F_SETFL, flags & ~File::NONBLOCK)
     end
 
     def open_broker_sock
@@ -406,14 +406,111 @@ module Urpc
 
     def reader_loop
       loop do
-        line = submit_read.gets
-        break if !line
-        id = line.chomp
-        next if id !~ ID_RE
-        process_submission(id)
+        frame = read_submit_frame
+        break if !frame
+        process_submission(frame)
       end
     rescue IOError, Errno::EBADF
       nil
+    end
+
+    def read_submit_frame
+      # getbyte primes Ruby's IO buffer with one read(8192) syscall; subsequent
+      # IO#read(n) calls drain the buffer instead of issuing their own syscalls.
+      version = in_read.getbyte
+      return if !version
+      abort_broker("invalid submit wire version: #{version}") if version != SubmitFrame::SUBMIT_WIRE_VERSION
+
+      flags = in_read.getbyte
+      return if !flags
+      abort_broker("unknown submit flag bits: 0x%02x" % flags) if (flags & ~SubmitFrame::KNOWN_SUBMIT_FLAGS) != 0
+
+      id_bin = read_exact(SubmitFrame::WIRE_ID_BYTES)
+      return if !id_bin
+      id_hex = id_bin.unpack1("H*")
+
+      wait_mode = in_read.getbyte
+      return if !wait_mode
+      wait_for_server =
+        case wait_mode
+        when SubmitFrame::WAIT_NO_SERVER
+          false
+        when SubmitFrame::WAIT_FOREVER
+          true
+        when SubmitFrame::WAIT_TIMEOUT_MS
+          ms_bytes = read_exact(SubmitFrame::WAIT_TIMEOUT_BYTES)
+          return if !ms_bytes
+          ms_bytes.unpack1("N") / 1000.0
+        else
+          abort_broker("invalid submit wait mode: #{wait_mode}")
+        end
+
+      rpc_key_len = in_read.getbyte
+      return if !rpc_key_len
+      abort_broker("invalid submit rpc_key length: #{rpc_key_len}") if rpc_key_len < 1 || rpc_key_len > SubmitFrame::WIRE_NAME_MAX
+      rpc_key_bytes = read_exact(rpc_key_len)
+      return if !rpc_key_bytes
+      rpc_key = decode_submit_name("rpc_key", rpc_key_bytes)
+
+      method_len = in_read.getbyte
+      return if !method_len
+      abort_broker("invalid submit method length: #{method_len}") if method_len < 1 || method_len > SubmitFrame::WIRE_NAME_MAX
+      method_bytes = read_exact(method_len)
+      return if !method_bytes
+      method_name = decode_submit_name("method", method_bytes)
+
+      inline = (flags & SubmitFrame::SUBMIT_FLAG_INLINE) != 0
+      cast = (flags & SubmitFrame::SUBMIT_FLAG_CAST) != 0
+
+      header_bytes = SubmitFrame::SUBMIT_VERSION_BYTES + SubmitFrame::SUBMIT_FLAGS_BYTES + SubmitFrame::WIRE_ID_BYTES + 1
+      header_bytes += SubmitFrame::WAIT_TIMEOUT_BYTES if wait_mode == SubmitFrame::WAIT_TIMEOUT_MS
+      header_bytes += 1 + rpc_key_len + 1 + method_len
+
+      body = nil
+      if inline
+        body_len_bytes = read_exact(2)
+        return if !body_len_bytes
+        body_len = body_len_bytes.unpack1("n")
+        total_frame = header_bytes + 2 + body_len
+        abort_broker("inline submit frame too large: #{total_frame}") if total_frame > SubmitFrame::INLINE_FRAME_MAX
+        abort_broker("inline submit body length zero") if body_len == 0
+        body = read_exact(body_len)
+        return if !body
+      end
+
+      {
+        id_hex: id_hex,
+        rpc_key: rpc_key,
+        method_name: method_name,
+        cast: cast,
+        wait_for_server: wait_for_server,
+        inline: inline,
+        body: body,
+      }
+    end
+
+    def read_exact(n)
+      buf = in_read.read(n)
+      return if !buf || buf.bytesize < n
+      buf
+    end
+
+    def decode_submit_name(label, bytes)
+      text = bytes.dup.force_encoding(Encoding::UTF_8)
+      abort_broker("#{label} invalid UTF-8") if !text.valid_encoding?
+      text
+    end
+
+    # Trusted-local protocol: any framing inconsistency is a client bug, not a
+    # recoverable runtime condition. Silently dropping it would hide the bug.
+    # Process.exit! (not raise) because: this runs in the reader thread, and
+    # process_submission has a broad `rescue => e` that would swallow a regular
+    # exception. SystemExit raised from a non-main thread does not terminate
+    # the process either. Process.exit! skips at-exit hooks but guarantees the
+    # broker is gone regardless of which thread tripped the fault.
+    def abort_broker(message)
+      warn("urpc broker: #{message}")
+      Process.exit!(1)
     end
 
     def broadcast_monitor_call(call)
@@ -460,20 +557,38 @@ module Urpc
       end
     end
 
-    def process_submission(id)
+    def process_submission(frame)
       received_at = monotonic_now
+      id = frame[:id_hex]
       request_call =
-        begin
-          Call.load(id)
-        rescue Errno::ENOENT
-          warn("urpc broker: request file missing for #{id}")
-          return
-        rescue MessagePack::UnpackError, Call::Invalid => e
-          warn("urpc broker: malformed request #{id}: #{e.class} #{e.message}")
-          synthesize_error_reply(id, Urpc::RemoteException, "malformed request: #{e.message}")
-          return
-        ensure
-          File.unlink(Call.request_path(id)) rescue nil
+        if frame[:inline]
+          begin
+            Call.load_body(
+              id, frame[:body],
+              rpc_key: frame[:rpc_key],
+              name: frame[:method_name],
+              cast: frame[:cast],
+              wait_for_server: frame[:wait_for_server],
+            )
+          rescue MessagePack::UnpackError, Call::Invalid => e
+            abort_broker("malformed inline submit body #{id}: #{e.class} #{e.message}")
+          end
+        else
+          begin
+            Call.load(
+              id,
+              rpc_key: frame[:rpc_key],
+              name: frame[:method_name],
+              cast: frame[:cast],
+              wait_for_server: frame[:wait_for_server],
+            )
+          rescue Errno::ENOENT => e
+            abort_broker("file-backed submit missing request file #{id}: #{e.message}")
+          rescue MessagePack::UnpackError, Call::Invalid => e
+            abort_broker("malformed file-backed submit body #{id}: #{e.class} #{e.message}")
+          ensure
+            File.unlink(Call.request_path(id)) rescue nil
+          end
         end
 
       if !request_call.cast? && !File.pipe?(request_call.reply_path)

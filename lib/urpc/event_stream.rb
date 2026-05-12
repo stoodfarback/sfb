@@ -26,8 +26,7 @@ module Urpc
         File.mkfifo(call.reply_path)
         self.reply_io = File.open(call.reply_path, File::RDONLY | File::NONBLOCK)
         Util.clear_nonblock(reply_io)
-        call.write_request_file!
-        client.submit(call.id)
+        client.submit_call(call)
         self.initial_response_deadline = client.initial_response_deadline
       rescue
         cleanup

@@ -36,7 +36,7 @@ class Minitest::Test
   end
 
   def wait_for_broker
-    raise("broker did not start") if !poll_until { File.socket?(Urpc.broker_sock) && File.pipe?(Urpc.submit_fifo) }
+    raise("broker did not start") if !poll_until { File.socket?(Urpc.broker_sock) && File.pipe?(Urpc.in_fifo) }
   end
 
   def wait_for_backend(rpc_key, count: 1)

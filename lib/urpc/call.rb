@@ -8,6 +8,7 @@ module Urpc
 
     def initialize(id:, rpc_key:, name:, args:, kargs:, cast:, wait_for_server: false)
       raise(ArgumentError, "invalid wait_for_server: #{wait_for_server.inspect}") if !self.class.valid_wait_for_server?(wait_for_server)
+      wait_for_server = false if wait_for_server.is_a?(Numeric) && wait_for_server <= 0
       self.id = id
       self.rpc_key = rpc_key
       self.name = name
@@ -37,21 +38,8 @@ module Urpc
       self.class.reply_path(id)
     end
 
-    def write_request_file!
-      File.open(request_path, File::WRONLY | File::CREAT | File::EXCL) do |io|
-        io.write(MessagePack.pack(to_request_hash))
-      end
-    end
-
-    def to_request_hash
-      {
-        rpc_key: rpc_key,
-        name: name,
-        args: args,
-        kargs: kargs,
-        cast: cast,
-        wait_for_server: wait_for_server,
-      }
+    def body_payload
+      MessagePack.pack([args, kargs])
     end
 
     def to_backend_request
@@ -70,29 +58,26 @@ module Urpc
       File.join(Urpc.replies_dir, "#{id}.fifo")
     end
 
-    def self.load(id)
-      data = File.binread(request_path(id))
-      hash = MessagePack.unpack(data)
-      raise(Invalid, "missing or invalid fields") if !valid_request_hash?(hash)
-      new(
-        id: id,
-        rpc_key: hash[:rpc_key],
-        name: hash[:name],
-        args: hash[:args],
-        kargs: hash[:kargs],
-        cast: hash[:cast],
-        wait_for_server: hash[:wait_for_server],
-      )
+    def self.load(id, rpc_key:, name:, cast:, wait_for_server:)
+      body = File.binread(request_path(id))
+      load_body(id, body, rpc_key: rpc_key, name: name, cast: cast, wait_for_server: wait_for_server)
     end
 
-    def self.valid_request_hash?(hash)
-      hash.is_a?(Hash) &&
-        hash[:rpc_key].is_a?(String) &&
-        hash[:name].is_a?(Symbol) &&
-        hash[:args].is_a?(Array) &&
-        hash[:kargs].is_a?(Hash) &&
-        [true, false].include?(hash[:cast]) &&
-        valid_wait_for_server?(hash[:wait_for_server])
+    def self.load_body(id, body, rpc_key:, name:, cast:, wait_for_server:)
+      data = MessagePack.unpack(body)
+      raise(Invalid, "missing or invalid body") if !data.is_a?(Array) || data.size != 2
+      args, kargs = data
+      raise(Invalid, "missing or invalid body") if !args.is_a?(Array) || !kargs.is_a?(Hash)
+
+      new(
+        id: id,
+        rpc_key: rpc_key,
+        name: name.to_sym,
+        args: args,
+        kargs: kargs,
+        cast: cast,
+        wait_for_server: wait_for_server,
+      )
     end
 
     def self.valid_wait_for_server?(value)

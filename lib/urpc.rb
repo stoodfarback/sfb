@@ -17,6 +17,7 @@ module Urpc
   autoload(:ResponseStream, "urpc/response_stream")
   autoload(:Server, "urpc/server")
   autoload(:StreamServer, "urpc/stream_server")
+  autoload(:SubmitFrame, "urpc/submit_frame")
   autoload(:Util, "urpc/util")
 
   DEFAULT_ROOT = "/tmp/urpc"
@@ -31,7 +32,7 @@ module Urpc
 
   def self.broker_sock = File.join(root, "broker.sock")
   def self.monitor_sock = File.join(root, "monitor.sock")
-  def self.submit_fifo = File.join(root, "submit.fifo")
+  def self.in_fifo = File.join(root, "in.fifo")
   def self.requests_dir = File.join(root, "requests")
   def self.replies_dir = File.join(root, "replies")
 

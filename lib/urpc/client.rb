@@ -38,13 +38,7 @@ module Urpc
         cast: true,
         wait_for_server: wait_for_server,
       )
-      begin
-        call_obj.write_request_file!
-        submit(call_obj.id)
-      rescue
-        File.unlink(call_obj.request_path) rescue nil
-        raise
-      end
+      submit_call(call_obj)
       nil
     end
 
@@ -92,23 +86,56 @@ module Urpc
     def preflight!
       raise(BrokerUnavailable, "broker root missing: #{Urpc.root}") if !File.directory?(Urpc.root)
       raise(BrokerUnavailable, "broker socket missing: #{Urpc.broker_sock}") if !File.socket?(Urpc.broker_sock)
-      raise(BrokerUnavailable, "submit fifo missing: #{Urpc.submit_fifo}") if !File.pipe?(Urpc.submit_fifo)
+      raise(BrokerUnavailable, "in.fifo missing: #{Urpc.in_fifo}") if !File.pipe?(Urpc.in_fifo)
     end
 
     SUBMIT_DEADLINE = 5.0
 
-    def submit(id)
-      File.open(Urpc.submit_fifo, File::WRONLY | File::NONBLOCK) do |io|
-        raise(BrokerUnavailable, "submit to #{Urpc.submit_fifo} timed out") if !io.wait_writable(SUBMIT_DEADLINE)
-        # This write is well under PIPE_BUF, so it's atomic across concurrent writers.
-        line = "#{id}\n"
-        written = io.write_nonblock(line)
-        raise(BrokerUnavailable, "short submit write to #{Urpc.submit_fifo}") if written != line.bytesize
+    def submit_call(call)
+      body = call.body_payload
+      envelope = build_envelope(call, inline: false)
+      candidate_size = envelope.bytesize + 2 + body.bytesize
+      inline = candidate_size <= SubmitFrame::INLINE_FRAME_MAX
+
+      if inline
+        frame = build_envelope(call, inline: true) + [body.bytesize].pack("n") + body
+        write_frame(frame)
+      else
+        File.open(call.request_path, File::WRONLY | File::CREAT | File::EXCL) do |io|
+          io.write(body)
+        end
+        begin
+          write_frame(envelope)
+        rescue
+          File.unlink(call.request_path) rescue nil
+          raise
+        end
+      end
+    end
+
+    def build_envelope(call, inline:)
+      flags = 0
+      flags |= SubmitFrame::SUBMIT_FLAG_INLINE if inline
+      flags |= SubmitFrame::SUBMIT_FLAG_CAST if call.cast?
+      SubmitFrame.encode_envelope(
+        id_bin: [call.id].pack("H*"),
+        flags: flags,
+        wait_for_server: call.wait_for_server,
+        rpc_key: call.rpc_key,
+        method_name: call.name,
+      )
+    end
+
+    def write_frame(frame)
+      File.open(Urpc.in_fifo, File::WRONLY | File::NONBLOCK) do |io|
+        raise(BrokerUnavailable, "submit to #{Urpc.in_fifo} timed out") if !io.wait_writable(SUBMIT_DEADLINE)
+        written = io.write_nonblock(frame)
+        raise(BrokerUnavailable, "short submit write to #{Urpc.in_fifo}: wrote #{written} of #{frame.bytesize}") if written != frame.bytesize
       end
     rescue Errno::ENXIO, Errno::ENOENT, Errno::EPIPE
-      raise(BrokerUnavailable, "submit to #{Urpc.submit_fifo} failed")
+      raise(BrokerUnavailable, "submit to #{Urpc.in_fifo} failed")
     rescue IO::WaitWritable, Errno::EAGAIN
-      raise(BrokerUnavailable, "submit to #{Urpc.submit_fifo} timed out during write")
+      raise(BrokerUnavailable, "submit to #{Urpc.in_fifo} timed out during write")
     end
 
     def io_select_timeout

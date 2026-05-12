@@ -70,7 +70,7 @@ class UrpcIntegrationTest < Minitest::Test
 
       # Important: first broker must still be usable.
       assert(File.socket?(Urpc.broker_sock))
-      assert(File.pipe?(Urpc.submit_fifo))
+      assert(File.pipe?(Urpc.in_fifo))
       st = Urpc::Client.new("urpc", timeout: 1).call(:stats)
       assert_kind_of(Hash, st)
     ensure
@@ -142,7 +142,7 @@ class UrpcIntegrationTest < Minitest::Test
       Process.wait(broker_pid)
 
       refute(File.exist?(Urpc.broker_sock))
-      refute(File.exist?(Urpc.submit_fifo))
+      refute(File.exist?(Urpc.in_fifo))
 
       assert(File.directory?(reqs_dir))
       assert(File.directory?(reps_dir))

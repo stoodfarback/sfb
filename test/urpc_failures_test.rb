@@ -158,25 +158,6 @@ class UrpcFailuresTest < Minitest::Test
     end
   end
 
-  def test_submit_detects_short_write
-    with_broker do
-      fake_io = Object.new
-      fake_io.define_singleton_method(:wait_writable) {|_deadline| true }
-      fake_io.define_singleton_method(:write_nonblock) {|_line| 1 }
-
-      open_submit_fifo = ->(path, _flags, &block) do
-        raise("unexpected open path: #{path}") if path != Urpc.submit_fifo
-        block.call(fake_io)
-      end
-
-      client = Urpc::Client.new("short_submit", timeout: 1)
-      e = File.stub(:open, open_submit_fifo) do
-        assert_raises(Urpc::BrokerUnavailable) { client.submit(SecureRandom.hex(16)) }
-      end
-      assert_match(/short submit write/, e.message)
-    end
-  end
-
   def test_reply_path_not_fifo
     with_broker do
       req_path = nil
@@ -191,24 +172,24 @@ class UrpcFailuresTest < Minitest::Test
       start_server("reply_path_not_fifo", handler)
       wait_for_backend("reply_path_not_fifo")
 
-      id = SecureRandom.hex(16)
-      req_path = File.join(Urpc.requests_dir, "#{id}.msgpack")
-      reply_path = File.join(Urpc.replies_dir, "#{id}.fifo")
-
-      request = {
+      call = Urpc::Call.new(
+        id: SecureRandom.hex(16),
         rpc_key: "reply_path_not_fifo",
         name: :echo,
         args: ["hello"],
         kargs: {},
         cast: false,
         wait_for_server: false,
-      }
+      )
+      req_path = call.request_path
+      reply_path = call.reply_path
+
       File.write(reply_path, "not a fifo")
-      packed = MessagePack.pack(request)
-      File.write(req_path, packed)
+      File.write(req_path, call.body_payload)
 
       client = Urpc::Client.new("reply_path_not_fifo", timeout: 0.5)
-      client.submit(id)
+      envelope = client.build_envelope(call, inline: false)
+      client.write_frame(envelope)
 
       sleep(0.5)
       assert(called.empty?, "handler should not have been invoked")
@@ -265,7 +246,7 @@ class UrpcFailuresTest < Minitest::Test
     with_broker do
       @broker.stop
       sleep(0.05)
-      # Remove broker.sock but leave submit.fifo
+      # Remove broker.sock but leave in.fifo
       File.unlink(Urpc.broker_sock) rescue nil
 
       client = Urpc::Client.new("whatever", timeout: 1)
@@ -279,7 +260,7 @@ class UrpcFailuresTest < Minitest::Test
       @broker.stop
       sleep(0.05)
       # broker.stop removes both sock and fifo; recreate sock so we hit the fifo check
-      File.unlink(Urpc.submit_fifo) rescue nil
+      File.unlink(Urpc.in_fifo) rescue nil
       dummy_sock = UNIXServer.new(Urpc.broker_sock)
 
       client = Urpc::Client.new("whatever", timeout: 1)
@@ -409,31 +390,6 @@ class UrpcFailuresTest < Minitest::Test
       assert_equal("delayed", call_thread.value)
     ensure
       call_thread&.kill rescue nil
-    end
-  end
-
-  def test_wait_for_server_numeric_request_hash_round_trips
-    with_root do
-      FileUtils.mkdir_p(Urpc.requests_dir)
-      id = SecureRandom.hex(16)
-      call = Urpc::Call.new(
-        id: id,
-        rpc_key: "round_trip",
-        name: :echo,
-        args: ["x"],
-        kargs: {},
-        cast: false,
-        wait_for_server: 1.25,
-      )
-
-      call.write_request_file!
-      loaded = Urpc::Call.load(id)
-
-      assert_equal(1.25, loaded.wait_for_server)
-      assert_equal(1.25, loaded.wait_for_server_seconds)
-      assert(loaded.wait_for_server?)
-    ensure
-      File.unlink(Urpc::Call.request_path(id)) rescue nil
     end
   end
 
@@ -813,49 +769,6 @@ class UrpcFailuresTest < Minitest::Test
     end
   end
 
-  def test_malformed_request_file
-    with_broker do
-      id = SecureRandom.hex(16)
-      reply_path = File.join(Urpc.replies_dir, "#{id}.fifo")
-      req_path = File.join(Urpc.requests_dir, "#{id}.msgpack")
-
-      File.mkfifo(reply_path)
-      reply_io = File.new(reply_path, File::RDONLY | File::NONBLOCK)
-      Urpc::Util.clear_nonblock(reply_io)
-
-      # Write garbage to request file
-      File.write(req_path, "this is not valid msgpack \xff\x00")
-
-      # Submit the ID
-      File.open(Urpc.submit_fifo, File::WRONLY | File::NONBLOCK) do |submit_io|
-        Urpc::Util.clear_nonblock(submit_io)
-        submit_io.syswrite("#{id}\n")
-      end
-
-      # Read the error reply
-      assert(reply_io.wait_readable(5), "should have gotten a reply for malformed request")
-
-      unpacker = MessagePack::DefaultFactory.unpacker
-      loop do
-        chunk = reply_io.read_nonblock(65_536, exception: false)
-        break if chunk == :wait_readable || chunk.nil?
-        unpacker.feed(chunk)
-      end
-
-      frames = []
-      unpacker.each {|f| frames << f }
-      assert(frames.size >= 1, "should have gotten at least one frame")
-
-      type, data_packed = frames.last
-      assert_equal(:error, type)
-
-      data = MessagePack.unpack(data_packed)
-      assert_match(/malformed/i, data[:message])
-    ensure
-      reply_io&.close rescue nil
-    end
-  end
-
   def test_server_reconnect_on_broker_restart
     with_broker do
       handler = echo_handler
@@ -928,8 +841,8 @@ class UrpcFailuresTest < Minitest::Test
       sleep(0.05)
 
       # Create a submit FIFO with no reader to trigger timeout
-      File.unlink(Urpc.submit_fifo) rescue nil
-      File.mkfifo(Urpc.submit_fifo)
+      File.unlink(Urpc.in_fifo) rescue nil
+      File.mkfifo(Urpc.in_fifo)
       # Also need broker.sock to exist for preflight
       # The broker.stop already removed it, recreate a dummy
       dummy_sock = UNIXServer.new(Urpc.broker_sock)
