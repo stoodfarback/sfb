@@ -71,6 +71,84 @@ class UrpcFailuresTest < Minitest::Test
     end
   end
 
+  def test_response_stream_terminal_state_is_guarded_by_write_lock
+    first_entered = Queue.new
+    second_waiting = Queue.new
+    release_first = Queue.new
+    mutex = Mutex.new
+    cv = ConditionVariable.new
+    locked = false
+    entries = 0
+
+    gate_lock = Object.new
+    gate_lock.define_singleton_method(:synchronize) do |&block|
+      entry_number = nil
+      mutex.synchronize do
+        entries += 1
+        entry_number = entries
+        if locked
+          second_waiting << true
+          cv.wait(mutex) while locked
+        else
+          locked = true
+          first_entered << true if entry_number == 1
+        end
+        locked = true
+      end
+
+      release_first.pop if entry_number == 1
+      block.call
+    ensure
+      mutex.synchronize do
+        locked = false
+        cv.broadcast
+      end
+    end
+
+    writes = Queue.new
+    sink = Object.new
+    sink.define_singleton_method(:write_response) {|type, value| writes << [type, value] }
+    sink.define_singleton_method(:write_error) {|exception| writes << [:error, exception] }
+
+    stream = Urpc::ResponseStream.new(sink:)
+    stream.write_lock = gate_lock
+
+    results = Queue.new
+    first = Thread.new do
+      stream.return("first")
+      results << [:first, :ok]
+    rescue => e
+      results << [:first, e]
+    end
+
+    first_entered.pop
+
+    second = Thread.new do
+      stream.return("second")
+      results << [:second, :ok]
+    rescue => e
+      results << [:second, e]
+    end
+
+    second_waiting.pop
+    release_first << true
+
+    first.join
+    second.join
+
+    outcomes = 2.times.to_h { results.pop }
+    assert_equal(:ok, outcomes.fetch(:first))
+    assert_equal("double-finish", outcomes.fetch(:second).message)
+    assert_equal([[:return, "first"]], [writes.pop])
+    assert(writes.empty?)
+  end
+
+  def test_response_frame_validation_accepts_inbox_but_not_inbox_messages
+    assert(Urpc::Frames.valid_response_frame?(Urpc::Frames.frame(:inbox, "/tmp/urpc-inbox")))
+    refute(Urpc::Frames.valid_response_frame?(Urpc::Frames.frame(:sync, "value")))
+    refute(Urpc::Frames.valid_response_frame?(Urpc::Frames.frame(:async, "value")))
+  end
+
   def test_null_response_stream_ignores_unencodable_values
     with_broker do
       stream = Urpc::ResponseStream.new(sink: Urpc::ResponseStream::Sinks::Null.new)

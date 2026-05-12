@@ -57,7 +57,7 @@ module Urpc
         ready_stream = active.find(&:has_pending?)
         if ready_stream
           event = ready_stream.consume_pending
-          ready_stream.handle_event(event)
+          next if ready_stream.handle_event(event) == :internal
           return [ready_stream, event]
         end
         ios = active.map(&:reply_io)

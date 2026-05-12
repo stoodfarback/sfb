@@ -11,21 +11,28 @@ module Urpc
     end
 
     def data(value)
-      raise("already finished, can't send more") if is_finished
-      write_response(:data, value)
+      write_lock.synchronize do
+        raise("already finished, can't send more") if is_finished
+        sink.write_response(:data, value)
+      end
+      nil
     end
 
     def return(value)
-      raise("double-finish") if is_finished
-      write_response(:return, value)
-      self.is_finished = true
+      write_lock.synchronize do
+        raise("double-finish") if is_finished
+        sink.write_response(:return, value)
+        self.is_finished = true
+      end
       nil
     end
 
     def error(exception)
-      raise("double-finish") if is_finished
-      write_error(exception)
-      self.is_finished = true
+      write_lock.synchronize do
+        raise("double-finish") if is_finished
+        sink.write_error(exception)
+        self.is_finished = true
+      end
       nil
     end
 

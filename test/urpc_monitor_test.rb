@@ -62,6 +62,34 @@ class UrpcMonitorTest < Minitest::Test
     end
   end
 
+  def test_monitor_receives_inbox_response
+    with_broker do
+      handler = Object.new
+      handler.define_singleton_method(:hello) do |req|
+        req.stream.write_response(:inbox, "/tmp/urpc-inbox")
+        req.stream.return("done")
+      end
+      start_stream_server("monitor_inbox_test", handler)
+      wait_for_backend("monitor_inbox_test", count: 1)
+
+      sock = UNIXSocket.new(Urpc.monitor_sock)
+
+      stream = Urpc::Client.new("monitor_inbox_test", timeout: 5).stream(:hello)
+      return_event = stream.next_event
+      assert_equal(:return, return_event.type)
+      assert_equal("done", return_event.data)
+      assert_equal("done", stream.result)
+
+      lines = Timeout.timeout(2) { 3.times.map { sock.gets } }
+
+      assert_match(/\A\[.*\] \[.{8}\] CALL monitor_inbox_test #hello\(\)\n\z/, lines[0])
+      assert_match(%r{\A\[.*\] \{.{8}\} INB "/tmp/urpc-inbox"\n\z}, lines[1])
+      assert_match(/\A\[.*\] \{.{8}\} RET "done"\n\z/, lines[2])
+
+      sock.close rescue nil
+    end
+  end
+
   def test_monitor_response_preview_is_limited_to_eighty_chars
     with_broker do
       payload = "x" * 100

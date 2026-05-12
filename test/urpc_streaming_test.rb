@@ -59,6 +59,50 @@ class UrpcStreamingTest < Minitest::Test
     end
   end
 
+  def test_inbox_response_is_internal_to_event_stream
+    with_broker do
+      handler = Object.new
+      handler.define_singleton_method(:hello) do |req|
+        req.stream.write_response(:inbox, "/tmp/urpc-inbox")
+        req.stream.data("visible")
+        req.stream.return("done")
+      end
+      start_stream_server("event_stream_inbox", handler)
+      wait_for_backend("event_stream_inbox")
+
+      client = Urpc::Client.new("event_stream_inbox", timeout: 5)
+      stream = client.stream(:hello)
+
+      event = stream.next_event
+      assert_equal(:data, event.type)
+      assert_equal("visible", event.data)
+
+      event = stream.next_event
+      assert_equal(:return, event.type)
+      assert_equal("done", event.data)
+    end
+  end
+
+  def test_inbox_response_is_internal_to_multiplexed_client_events
+    with_broker do
+      handler = Object.new
+      handler.define_singleton_method(:hello) do |req|
+        req.stream.write_response(:inbox, "/tmp/urpc-inbox")
+        req.stream.data("visible")
+        req.stream.return("done")
+      end
+      start_stream_server("client_inbox", handler)
+      wait_for_backend("client_inbox")
+
+      client = Urpc::Client.new("client_inbox", timeout: 5)
+      stream = client.stream(:hello)
+      events = []
+      client.each_event(stream) {|_s, event| events << [event.type, event.data] }
+
+      assert_equal([[:data, "visible"], [:return, "done"]], events)
+    end
+  end
+
   def test_event_stream_result_returns_terminal_value
     with_broker do
       start_server("echo", echo_handler)

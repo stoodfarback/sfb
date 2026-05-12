@@ -2,7 +2,9 @@
 
 module Urpc
   module Frames
-    TYPES = %i[data return error].freeze
+    RESPONSE_TYPES = %i[data return error inbox].freeze
+    TYPES = RESPONSE_TYPES
+    INBOX_TYPES = %i[sync async].freeze
     TERMINAL_TYPES = %i[return error].freeze
 
     def self.frame(type, value)

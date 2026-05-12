@@ -11,6 +11,7 @@ module Urpc
     MONITOR_PAYLOAD_PREVIEW_LENGTH = 80
     MONITOR_RESPONSE_TYPES = {
       data: "DAT",
+      inbox: "INB",
       return: "RET",
       error: "ERR",
     }.freeze

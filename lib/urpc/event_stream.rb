@@ -40,9 +40,11 @@ module Urpc
 
     def next_event
       raise("stream is finished") if is_finished
-      event = await_event
-      handle_event(event)
-      event
+      loop do
+        event = await_event
+        next if handle_event(event) == :internal
+        return(event)
+      end
     end
 
     def each_event
@@ -103,6 +105,9 @@ module Urpc
 
     def handle_event(event)
       case event.type
+      when :inbox
+        handle_inbox(event.data)
+        :internal
       when :return
         self.result_value = event.data
         self.is_finished = true
@@ -112,6 +117,11 @@ module Urpc
         self.is_finished = true
         cleanup
       end
+    end
+
+    def handle_inbox(_path)
+      # TODO: Open and store the inbox writer when bidirectional client sends land.
+      nil
     end
 
     def await_event
