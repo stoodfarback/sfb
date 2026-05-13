@@ -51,9 +51,25 @@ class UrpcBidirectionalTest < Minitest::Test
       wait_for_backend("bad_bidirectional")
 
       e = assert_raises(ArgumentError) do
-        Urpc::Client.new("bad_bidirectional", timeout: 5).call(:call)
+        Urpc::Client.new("bad_bidirectional", timeout: 5).bidirectional_stream(:call).result
       end
       assert_match(/must be a Urpc::BidirectionalHandler/, e.message)
+    end
+  end
+
+  def test_handle_bidirectional_requires_bidirectional_request
+    with_broker do
+      handler_class = Class.new(Urpc::BidirectionalHandler) do
+        def run! = "done"
+      end
+
+      start_stream_server("requires_bidirectional", bidirectional_handler(handler_class))
+      wait_for_backend("requires_bidirectional")
+
+      e = assert_raises(ArgumentError) do
+        Urpc::Client.new("requires_bidirectional", timeout: 5).call(:call)
+      end
+      assert_match(/not requested as bidirectional/, e.message)
     end
   end
 
@@ -69,11 +85,50 @@ class UrpcBidirectionalTest < Minitest::Test
       start_stream_server("await_inbox", bidirectional_handler(handler_class))
       wait_for_backend("await_inbox")
 
-      stream = Urpc::Client.new("await_inbox", timeout: 5).stream(:call)
+      stream = Urpc::Client.new("await_inbox", timeout: 5).bidirectional_stream(:call)
       assert(stream.await_inbox)
       assert(stream.inbox_open?)
       event = stream.next_event
       assert_equal([:data, "after-open"], [event.type, event.data])
+      assert_equal("done", stream.result)
+    end
+  end
+
+  def test_bidirectional_request_metadata_uses_broker_owned_inbox_path
+    with_broker do
+      observed = Queue.new
+      handler_class = Class.new(Urpc::BidirectionalHandler) do
+        attr_accessor(:observed)
+
+        def initialize(req, observed:)
+          super(req)
+          self.observed = observed
+        end
+
+        def setup_inbox!
+          observed << [req.bidirectional?, req.inbox_path]
+          super
+        end
+
+        def run!
+          finish("done")
+        end
+      end
+
+      handler = Object.new
+      handler.define_singleton_method(:call) do |req|
+        req.handle_bidirectional!(handler_class, observed:)
+      end
+
+      start_stream_server("metadata_inbox", handler)
+      wait_for_backend("metadata_inbox")
+
+      stream = Urpc::Client.new("metadata_inbox", timeout: 5).bidirectional_stream(:call)
+      assert(stream.await_inbox)
+      bidirectional, path = observed.pop
+
+      assert_equal(true, bidirectional)
+      assert_equal(Urpc::Call.inbox_path(stream.id), path)
       assert_equal("done", stream.result)
     end
   end
@@ -91,7 +146,7 @@ class UrpcBidirectionalTest < Minitest::Test
       start_stream_server("sync_prompt", bidirectional_handler(handler_class))
       wait_for_backend("sync_prompt")
 
-      stream = Urpc::Client.new("sync_prompt", timeout: 5).stream(:call)
+      stream = Urpc::Client.new("sync_prompt", timeout: 5).bidirectional_stream(:call)
       event = stream.next_event
       assert_equal(:data, event.type)
       assert_equal({ prompt: "Apply changes?" }, event.data)
@@ -123,7 +178,7 @@ class UrpcBidirectionalTest < Minitest::Test
       start_stream_server("async_cancel", bidirectional_handler(handler_class))
       wait_for_backend("async_cancel")
 
-      stream = Urpc::Client.new("async_cancel", timeout: 5).stream(:call)
+      stream = Urpc::Client.new("async_cancel", timeout: 5).bidirectional_stream(:call)
       assert_equal("started", stream.next_event.data)
       stream.send_async(:cancel)
 
@@ -146,7 +201,7 @@ class UrpcBidirectionalTest < Minitest::Test
       start_stream_server("disconnect_receive", bidirectional_handler(handler_class))
       wait_for_backend("disconnect_receive")
 
-      stream = Urpc::Client.new("disconnect_receive", timeout: 5).stream(:call)
+      stream = Urpc::Client.new("disconnect_receive", timeout: 5).bidirectional_stream(:call)
       assert_equal("waiting", stream.next_event.data)
       stream.close_inbox
 
@@ -183,9 +238,10 @@ class UrpcBidirectionalTest < Minitest::Test
       start_stream_server("cleanup_inbox", handler)
       wait_for_backend("cleanup_inbox")
 
-      stream = Urpc::Client.new("cleanup_inbox", timeout: 5).stream(:call)
+      stream = Urpc::Client.new("cleanup_inbox", timeout: 5).bidirectional_stream(:call)
       assert(stream.await_inbox)
       path = paths.pop
+      assert_equal(Urpc::Call.inbox_path(stream.id), path)
       assert_equal("done", stream.result)
       assert(poll_until { !File.exist?(path) }, "inbox FIFO was not unlinked: #{path}")
     end
@@ -220,7 +276,7 @@ class UrpcBidirectionalTest < Minitest::Test
       start_stream_server("cleanup_error_inbox", handler)
       wait_for_backend("cleanup_error_inbox")
 
-      stream = Urpc::Client.new("cleanup_error_inbox", timeout: 5).stream(:call)
+      stream = Urpc::Client.new("cleanup_error_inbox", timeout: 5).bidirectional_stream(:call)
       assert(stream.await_inbox)
       path = paths.pop
       e = assert_raises(RuntimeError) { stream.result }
@@ -261,7 +317,7 @@ class UrpcBidirectionalTest < Minitest::Test
       start_stream_server("cleanup_disconnect_inbox", handler)
       wait_for_backend("cleanup_disconnect_inbox")
 
-      stream = Urpc::Client.new("cleanup_disconnect_inbox", timeout: 5).stream(:call)
+      stream = Urpc::Client.new("cleanup_disconnect_inbox", timeout: 5).bidirectional_stream(:call)
       assert(stream.await_inbox)
       path = paths.pop
       stream.close_inbox
@@ -297,7 +353,7 @@ class UrpcBidirectionalTest < Minitest::Test
 
       bidirectional_client = Urpc::Client.new("mixed_bidir", timeout: 5)
       normal_client = Urpc::Client.new("mixed_normal", timeout: 5)
-      bidirectional_stream = bidirectional_client.stream(:call)
+      bidirectional_stream = bidirectional_client.bidirectional_stream(:call)
       normal_stream = normal_client.stream(:call)
       events = []
 

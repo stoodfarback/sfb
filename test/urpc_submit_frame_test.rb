@@ -61,7 +61,7 @@ class UrpcSubmitFrameTest < Minitest::Test
       [method_b.bytesize].pack("C") + method_b
   end
 
-  def call_for_encoding(rpc_key: "k", name: :m)
+  def call_for_encoding(rpc_key: "k", name: :m, bidirectional: false)
     Urpc::Call.new(
       id: SecureRandom.hex(16),
       rpc_key: rpc_key,
@@ -69,6 +69,7 @@ class UrpcSubmitFrameTest < Minitest::Test
       args: [],
       kargs: {},
       cast: false,
+      bidirectional: bidirectional,
     )
   end
 
@@ -88,6 +89,14 @@ class UrpcSubmitFrameTest < Minitest::Test
     with_subprocess_broker do |pid|
       # 0x80 is not a known flag bit.
       write_raw(base_envelope(flags: 0x80))
+      assert_broker_aborts(pid)
+    end
+  end
+
+  def test_broker_aborts_on_bidirectional_cast
+    with_subprocess_broker do |pid|
+      flags = SUBMIT_FLAG_CAST | SUBMIT_FLAG_BIDIRECTIONAL
+      write_raw(base_envelope(flags: flags))
       assert_broker_aborts(pid)
     end
   end
@@ -183,6 +192,24 @@ class UrpcSubmitFrameTest < Minitest::Test
     call = call_for_encoding(name: "\xff".b)
     error = assert_raises(ArgumentError) { client.build_envelope(call, inline: false) }
     assert_match(/method invalid UTF-8/, error.message)
+  end
+
+  def test_bidirectional_call_sets_submit_flag
+    client = Urpc::Client.new("unused")
+    call = call_for_encoding(bidirectional: true)
+    flags = client.build_envelope(call, inline: false).unpack1("@1C")
+
+    assert_equal(Urpc::SubmitFrame::SUBMIT_FLAG_BIDIRECTIONAL,
+      flags & Urpc::SubmitFrame::SUBMIT_FLAG_BIDIRECTIONAL)
+    assert_equal(0, flags & Urpc::SubmitFrame::SUBMIT_FLAG_CAST)
+  end
+
+  def test_normal_call_does_not_set_bidirectional_submit_flag
+    client = Urpc::Client.new("unused")
+    call = call_for_encoding
+    flags = client.build_envelope(call, inline: false).unpack1("@1C")
+
+    assert_equal(0, flags & Urpc::SubmitFrame::SUBMIT_FLAG_BIDIRECTIONAL)
   end
 
   ## Positive round-trip tests

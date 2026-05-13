@@ -7,7 +7,7 @@ module Urpc
     attr_accessor(:client, :call, :reply_io, :unpacker, :pending, :had_data, :is_finished, :result_value, :error_value,
       :initial_response_deadline, :inbox_io, :inbox_path, :inbox_write_lock)
 
-    def initialize(client:, method_name:, args:, kargs:)
+    def initialize(client:, method_name:, args:, kargs:, bidirectional:)
       self.client = client
       self.unpacker = MessagePack::DefaultFactory.unpacker
       self.pending = []
@@ -22,6 +22,7 @@ module Urpc
         kargs: kargs,
         cast: false,
         wait_for_server: client.wait_for_server,
+        bidirectional: bidirectional,
       )
 
       begin
@@ -159,6 +160,7 @@ module Urpc
       close_inbox
       self.inbox_path = path
       self.inbox_io = open_inbox_writer(path)
+      write_inbox_frame(:ready, nil)
       nil
     end
 

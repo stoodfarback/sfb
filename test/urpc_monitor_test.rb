@@ -79,7 +79,7 @@ class UrpcMonitorTest < Minitest::Test
 
       sock = UNIXSocket.new(Urpc.monitor_sock)
 
-      stream = Urpc::Client.new("monitor_inbox_test", timeout: 5).stream(:hello)
+      stream = Urpc::Client.new("monitor_inbox_test", timeout: 5).bidirectional_stream(:hello)
       return_event = stream.next_event
       assert_equal(:return, return_event.type)
       assert_equal("done", return_event.data)
@@ -88,7 +88,7 @@ class UrpcMonitorTest < Minitest::Test
       lines = Timeout.timeout(2) { 3.times.map { sock.gets } }
 
       assert_match(/\A\[.*\] \[.{8}\] CALL monitor_inbox_test #hello\(\)\n\z/, lines[0])
-      assert_match(%r{\A\[.*\] \{.{8}\} INB ".*/inboxes/[a-f0-9]{32}\.fifo"\n\z}, lines[1])
+      assert_match(%r{\A\[.*\] \{.{8}\} INB ".*/inboxes/[a-f0-9]{32}\.fifo"?\n\z}, lines[1])
       assert_match(/\A\[.*\] \{.{8}\} RET "done"\n\z/, lines[2])
 
       sock.close rescue nil

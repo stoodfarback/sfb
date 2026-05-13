@@ -15,10 +15,10 @@ module Urpc
     end
 
     def setup_inbox!
-      self.inbox = Inbox.new(owner: self)
+      self.inbox = Inbox.new(owner: self, path: req.inbox_path)
       inbox.start
-      send_frame(:inbox, inbox.path)
-      inbox.await_open!(timeout: INBOX_OPEN_TIMEOUT)
+      send_control(:inbox_ready, nil)
+      inbox.await_ready!(timeout: INBOX_OPEN_TIMEOUT)
     end
 
     def receive = inbox.receive

@@ -76,7 +76,7 @@ class UrpcStreamingTest < Minitest::Test
       wait_for_backend("event_stream_inbox")
 
       client = Urpc::Client.new("event_stream_inbox", timeout: 5)
-      stream = client.stream(:hello)
+      stream = client.bidirectional_stream(:hello)
 
       event = stream.next_event
       assert_equal(:data, event.type)
@@ -105,7 +105,7 @@ class UrpcStreamingTest < Minitest::Test
       wait_for_backend("client_inbox")
 
       client = Urpc::Client.new("client_inbox", timeout: 5)
-      stream = client.stream(:hello)
+      stream = client.bidirectional_stream(:hello)
       events = []
       client.each_event(stream) {|_s, event| events << [event.type, event.data] }
 

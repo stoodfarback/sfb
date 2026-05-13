@@ -23,7 +23,13 @@ module Urpc
     def stream(method_name, *args, **kargs)
       raise(ArgumentError, "block not allowed over RPC") if block_given?
       preflight!
-      EventStream.new(client: self, method_name: method_name, args: args, kargs: kargs)
+      EventStream.new(client: self, method_name: method_name, args: args, kargs: kargs, bidirectional: false)
+    end
+
+    def bidirectional_stream(method_name, *args, **kargs)
+      raise(ArgumentError, "block not allowed over RPC") if block_given?
+      preflight!
+      EventStream.new(client: self, method_name: method_name, args: args, kargs: kargs, bidirectional: true)
     end
 
     def cast(method_name, *args, **kargs)
@@ -117,6 +123,7 @@ module Urpc
       flags = 0
       flags |= SubmitFrame::SUBMIT_FLAG_INLINE if inline
       flags |= SubmitFrame::SUBMIT_FLAG_CAST if call.cast?
+      flags |= SubmitFrame::SUBMIT_FLAG_BIDIRECTIONAL if call.bidirectional?
       SubmitFrame.encode_envelope(
         id_bin: [call.id].pack("H*"),
         flags: flags,

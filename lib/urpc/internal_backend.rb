@@ -35,6 +35,11 @@ module Urpc
         return
       end
 
+      if call.bidirectional?
+        broker.synthesize_call_error(call, ArgumentError, "bidirectional calls require StreamServer backend")
+        return
+      end
+
       broker.mark_call_dispatched(call)
 
       sink = call.cast? ? ResponseStream::Sinks::Null.new : ResponseStream::Sinks::Fifo.new(call.reply_io)
@@ -42,7 +47,7 @@ module Urpc
       stream = ResponseStream.new(sink: sink)
       begin
         broker.in_flight_inc(key)
-        req = Req.new(args: call.args, kargs: call.kargs, stream: stream)
+        req = Req.new(args: call.args, kargs: call.kargs, stream: stream, bidirectional: false, inbox_path: nil)
         handler.send(call.name, req)
         if !stream.is_finished
           stream.error("stream not finished but method returned")

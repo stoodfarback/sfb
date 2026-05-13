@@ -37,6 +37,13 @@ module Urpc
         return
       end
 
+      begin
+        call.ensure_inbox
+      rescue => e
+        broker.synthesize_call_error(call, Urpc::RemoteException, "failed to create inbox: #{e.class} #{e.message}")
+        return
+      end
+
       broker.in_flight_inc(key)
       dispatched = false
       call_reclaimed = false
@@ -47,7 +54,12 @@ module Urpc
 
         loop do
           frame = unpacker.read
-          raise(MessagePack::UnpackError, "malformed backend frame") if !Frames.valid_response_frame?(frame)
+          if Frames.valid_backend_control_frame?(frame)
+            handle_control_frame(call, frame)
+            next
+          end
+
+          raise(MessagePack::UnpackError, "malformed backend frame") if !Frames.valid_backend_response_frame?(frame)
           type = frame[0]
           broker.broadcast_monitor_response(call, frame)
           call.write_reply_frame(frame)
@@ -78,6 +90,18 @@ module Urpc
       call.write_reply_frame(frame)
     ensure
       call.close_reply_io
+    end
+
+    def handle_control_frame(call, frame)
+      type, = frame
+      case type
+      when :inbox_ready
+        raise(MessagePack::UnpackError, "inbox_ready for non-bidirectional call") if !call.bidirectional?
+        call.mark_inbox_ready!
+        inbox_frame = Frames.frame(:inbox, call.inbox_path)
+        broker.broadcast_monitor_response(call, inbox_frame)
+        call.write_reply_frame(inbox_frame)
+      end
     end
   end
 end

@@ -28,5 +28,6 @@ module Urpc
     def error(exception) = stream.error(exception)
     def finished? = stream.is_finished
     def send_frame(type, value) = stream.write_response(type, value)
+    def send_control(type, value) = stream.write_control(type, value)
   end
 end

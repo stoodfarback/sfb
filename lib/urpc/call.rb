@@ -4,10 +4,12 @@ module Urpc
   class Call
     class Invalid < StandardError; end
 
-    attr_accessor(:id, :rpc_key, :name, :args, :kargs, :cast, :wait_for_server)
+    attr_accessor(:id, :rpc_key, :name, :args, :kargs, :cast, :wait_for_server, :bidirectional)
 
-    def initialize(id:, rpc_key:, name:, args:, kargs:, cast:, wait_for_server: false)
+    def initialize(id:, rpc_key:, name:, args:, kargs:, cast:, wait_for_server: false, bidirectional: false)
       raise(ArgumentError, "invalid wait_for_server: #{wait_for_server.inspect}") if !self.class.valid_wait_for_server?(wait_for_server)
+      raise(ArgumentError, "invalid bidirectional: #{bidirectional.inspect}") if ![true, false].include?(bidirectional)
+      raise(ArgumentError, "bidirectional cast not supported") if cast && bidirectional
       wait_for_server = false if wait_for_server.is_a?(Numeric) && wait_for_server <= 0
       self.id = id
       self.rpc_key = rpc_key
@@ -16,6 +18,7 @@ module Urpc
       self.kargs = kargs
       self.cast = cast
       self.wait_for_server = wait_for_server
+      self.bidirectional = bidirectional
     end
 
     def cast?
@@ -28,6 +31,10 @@ module Urpc
 
     def wait_for_server_seconds
       self.class.wait_for_server_seconds(wait_for_server)
+    end
+
+    def bidirectional?
+      bidirectional == true
     end
 
     def request_path
@@ -58,12 +65,16 @@ module Urpc
       File.join(Urpc.replies_dir, "#{id}.fifo")
     end
 
-    def self.load(id, rpc_key:, name:, cast:, wait_for_server:)
-      body = File.binread(request_path(id))
-      load_body(id, body, rpc_key: rpc_key, name: name, cast: cast, wait_for_server: wait_for_server)
+    def self.inbox_path(id)
+      File.join(Urpc.inboxes_dir, "#{id}.fifo")
     end
 
-    def self.load_body(id, body, rpc_key:, name:, cast:, wait_for_server:)
+    def self.load(id, rpc_key:, name:, cast:, wait_for_server:, bidirectional: false)
+      body = File.binread(request_path(id))
+      load_body(id, body, rpc_key: rpc_key, name: name, cast: cast, wait_for_server: wait_for_server, bidirectional: bidirectional)
+    end
+
+    def self.load_body(id, body, rpc_key:, name:, cast:, wait_for_server:, bidirectional: false)
       data = MessagePack.unpack(body)
       raise(Invalid, "missing or invalid body") if !data.is_a?(Array) || data.size != 2
       args, kargs = data
@@ -77,6 +88,7 @@ module Urpc
         kargs: kargs,
         cast: cast,
         wait_for_server: wait_for_server,
+        bidirectional: bidirectional,
       )
     end
 

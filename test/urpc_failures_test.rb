@@ -145,8 +145,13 @@ class UrpcFailuresTest < Minitest::Test
 
   def test_response_frame_validation_accepts_inbox_but_not_inbox_messages
     assert(Urpc::Frames.valid_response_frame?(Urpc::Frames.frame(:inbox, "/tmp/urpc-inbox")))
+    refute(Urpc::Frames.valid_backend_response_frame?(Urpc::Frames.frame(:inbox, "/tmp/urpc-inbox")))
+    assert(Urpc::Frames.valid_backend_control_frame?(Urpc::Frames.frame(:inbox_ready, nil)))
+    refute(Urpc::Frames.valid_backend_control_frame?(Urpc::Frames.frame(:inbox_ready, "path")))
     refute(Urpc::Frames.valid_response_frame?(Urpc::Frames.frame(:sync, "value")))
     refute(Urpc::Frames.valid_response_frame?(Urpc::Frames.frame(:async, "value")))
+    assert(Urpc::Frames.valid_inbox_frame?(Urpc::Frames.frame(:ready, nil)))
+    refute(Urpc::Frames.valid_inbox_frame?(Urpc::Frames.frame(:ready, "value")))
     assert(Urpc::Frames.valid_inbox_frame?(Urpc::Frames.frame(:sync, "value")))
     assert(Urpc::Frames.valid_inbox_frame?(Urpc::Frames.frame(:async, "value")))
     refute(Urpc::Frames.valid_inbox_frame?(Urpc::Frames.frame(:inbox, "/tmp/urpc-inbox")))
@@ -1038,6 +1043,32 @@ class UrpcFailuresTest < Minitest::Test
       # Backend should be deregistered
       sleep(0.2)
       assert_equal(0, @broker.backend_count("malformed_backend_key"))
+    ensure
+      fake_server_thread&.kill rescue nil
+    end
+  end
+
+  def test_backend_provided_inbox_response_is_rejected
+    with_broker do
+      fake_server_thread = Thread.new do
+        sock = UNIXSocket.open(Urpc.broker_sock)
+        sock.write(MessagePack.pack("backend_inbox_key"))
+
+        unpacker = MessagePack::DefaultFactory.unpacker(sock)
+        _request = unpacker.read
+
+        sock.write(Urpc::Frames.pack(:inbox, "/tmp/server-owned-inbox"))
+        sleep(1)
+        sock.close rescue nil
+      end
+
+      raise("fake backend did not register") if !poll_until { @broker.backend_count("backend_inbox_key") >= 1 }
+
+      client = Urpc::Client.new("backend_inbox_key", timeout: 5)
+      e = assert_raises(Urpc::RemoteException) { client.call(:whatever) }
+      assert_match(/malformed backend frame/, e.message)
+
+      raise("backend was not deregistered") if !poll_until { @broker.backend_count("backend_inbox_key") == 0 }
     ensure
       fake_server_thread&.kill rescue nil
     end

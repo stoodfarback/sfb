@@ -7,40 +7,38 @@ module Urpc
     READ_WAIT_INTERVAL = 0.1
     CLOSE_JOIN_TIMEOUT = 0.5
 
-    attr_accessor(:owner, :path, :sync_messages, :state_lock, :state_cv, :opened, :disconnected,
+    attr_accessor(:owner, :path, :sync_messages, :state_lock, :state_cv, :ready, :disconnected,
       :close_requested, :reader_error, :reader_thread, :read_io, :unpacker)
 
-    def initialize(owner:)
+    def initialize(owner:, path:)
       self.owner = owner
-      self.path = File.join(Urpc.inboxes_dir, "#{SecureRandom.hex(16)}.fifo")
+      self.path = path
       self.sync_messages = []
       self.state_lock = Mutex.new
       self.state_cv = ConditionVariable.new
-      self.opened = false
+      self.ready = false
       self.disconnected = false
       self.close_requested = false
       self.unpacker = MessagePack::DefaultFactory.unpacker
     end
 
     def start
-      FileUtils.mkdir_p(Urpc.inboxes_dir)
-      File.mkfifo(path)
       self.reader_thread = Thread.new { reader_loop }
       reader_thread.report_on_exception = false
       nil
     end
 
-    def await_open!(timeout:)
+    def await_ready!(timeout:)
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
       state_lock.synchronize do
         loop do
           raise(reader_error) if reader_error
-          return(true) if opened
-          raise(EOFError, "inbox closed before opening") if disconnected
+          return(true) if ready
+          raise(EOFError, "inbox closed before ready") if disconnected
           raise(IOError, "inbox closed") if close_requested
 
           remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          raise(TimeoutException, "inbox open timed out") if remaining <= 0
+          raise(TimeoutException, "inbox ready timed out") if remaining <= 0
           state_cv.wait(state_lock, remaining)
         end
       end
@@ -71,14 +69,13 @@ module Urpc
         reader_thread.join(CLOSE_JOIN_TIMEOUT)
         reader_thread.kill if reader_thread.alive?
       end
-      File.unlink(path) rescue nil
       nil
     end
 
     def reader_loop
       self.read_io = File.open(path, File::RDONLY | File::NONBLOCK)
-      wait_for_writer
-      read_frames if opened
+      wait_for_ready
+      read_frames if ready
     rescue IOError, Errno::EBADF
       mark_disconnected if !close_requested
     rescue => e
@@ -87,21 +84,19 @@ module Urpc
       read_io&.close rescue nil
     end
 
-    def wait_for_writer
+    def wait_for_ready
       loop do
         return if close_requested
 
         chunk = read_io.read_nonblock(READ_CHUNK, exception: false)
         case chunk
         when :wait_readable
-          mark_open
-          return
+          read_io.wait_readable(READ_WAIT_INTERVAL)
         when nil
           sleep(OPEN_POLL_INTERVAL)
         else
-          mark_open
           process_chunk(chunk)
-          return
+          return if ready
         end
       end
     end
@@ -138,7 +133,12 @@ module Urpc
     def dispatch_frame(frame)
       type, raw_payload = frame
       value = Frames.unpack_payload(raw_payload)
+      raise(MessagePack::UnpackError, "inbox frame before ready") if type != :ready && !ready
       case type
+      when :ready
+        raise(MessagePack::UnpackError, "duplicate inbox ready frame") if ready
+        raise(MessagePack::UnpackError, "invalid inbox ready payload") if !raw_payload.nil?
+        mark_ready
       when :sync
         state_lock.synchronize do
           sync_messages << value
@@ -149,9 +149,9 @@ module Urpc
       end
     end
 
-    def mark_open
+    def mark_ready
       state_lock.synchronize do
-        self.opened = true
+        self.ready = true
         state_cv.broadcast
       end
     end

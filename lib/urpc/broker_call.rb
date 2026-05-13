@@ -2,11 +2,12 @@
 
 module Urpc
   class BrokerCall
-    attr_accessor(:call, :reply_io, :wait_deadline, :received_at)
+    attr_accessor(:call, :reply_io, :wait_deadline, :received_at, :inbox_path, :inbox_ready)
 
     def initialize(call:, received_at:)
       self.call = call
       self.received_at = received_at
+      self.inbox_ready = false
     end
 
     def id = call.id
@@ -16,9 +17,16 @@ module Urpc
     def kargs = call.kargs
     def reply_path = call.reply_path
     def cast? = call.cast?
+    def bidirectional? = call.bidirectional?
     def wait_for_server? = call.wait_for_server?
     def wait_for_server_seconds = call.wait_for_server_seconds
-    def to_backend_request = call.to_backend_request
+
+    def to_backend_request
+      call.to_backend_request.merge(
+        bidirectional: bidirectional?,
+        inbox_path: bidirectional? ? ensure_inbox_path : nil,
+      )
+    end
 
     def wanted?
       cast? || File.pipe?(reply_path)
@@ -49,18 +57,37 @@ module Urpc
       self.reply_io = nil
     end
 
+    def ensure_inbox
+      return true if !bidirectional?
+      path = ensure_inbox_path
+      return true if File.pipe?(path)
+      FileUtils.mkdir_p(Urpc.inboxes_dir)
+      File.mkfifo(path)
+      true
+    end
+
+    def ensure_inbox_path
+      self.inbox_path ||= Call.inbox_path(id)
+    end
+
+    def mark_inbox_ready!
+      raise(MessagePack::UnpackError, "duplicate inbox_ready frame") if inbox_ready
+      self.inbox_ready = true
+    end
+
     def finish!
-      cleanup_reply
+      cleanup
     end
 
     def abandon!
-      cleanup_reply
+      cleanup
     end
 
-    def cleanup_reply
+    def cleanup
       close_reply_io
       return if cast?
       File.unlink(reply_path) rescue nil
+      File.unlink(inbox_path) rescue nil if inbox_path
     end
   end
 end

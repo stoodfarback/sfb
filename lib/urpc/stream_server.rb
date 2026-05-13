@@ -45,7 +45,13 @@ module Urpc
       raise(MessagePack::UnpackError, "malformed broker request frame") if !valid_request_frame?(req_data)
 
       stream = ResponseStream.new(sink: ResponseStream::Sinks::Socket.new(sock))
-      req = Req.new(args: req_data[:args], kargs: req_data[:kargs], stream: stream)
+      req = Req.new(
+        args: req_data[:args],
+        kargs: req_data[:kargs],
+        stream: stream,
+        bidirectional: req_data[:bidirectional] == true,
+        inbox_path: req_data[:inbox_path],
+      )
 
       begin
         handler.send(req_data[:name], req)
@@ -60,10 +66,18 @@ module Urpc
     end
 
     def valid_request_frame?(req)
-      req.is_a?(Hash) &&
-        req[:name].is_a?(Symbol) &&
-        req[:args].is_a?(Array) &&
-        req[:kargs].is_a?(Hash)
+      return false if !req.is_a?(Hash)
+      return false if !req[:name].is_a?(Symbol)
+      return false if !req[:args].is_a?(Array)
+      return false if !req[:kargs].is_a?(Hash)
+
+      bidirectional = req.fetch(:bidirectional, false)
+      inbox_path = req[:inbox_path]
+      return false if ![true, false].include?(bidirectional)
+      return false if bidirectional && (!inbox_path.is_a?(String) || inbox_path.empty?)
+      return false if !bidirectional && !inbox_path.nil?
+
+      true
     end
   end
 end

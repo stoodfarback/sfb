@@ -46,6 +46,11 @@ module Urpc
       nil
     end
 
+    def write_control(type, value)
+      write_lock.synchronize { sink.write_control(type, value) }
+      nil
+    end
+
     module Sinks
       class Socket
         attr_accessor(:io)
@@ -61,6 +66,11 @@ module Urpc
 
         def write_error(exception)
           io.write(Frames.pack_error(exception))
+          io.flush
+        end
+
+        def write_control(type, value)
+          io.write(Frames.pack(type, value))
           io.flush
         end
       end

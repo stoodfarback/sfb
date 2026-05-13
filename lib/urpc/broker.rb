@@ -381,6 +381,7 @@ module Urpc
       # TODO: expire queued `wait_for_server` calls whose `reply_path` is gone.
       sweep_dir(Urpc.requests_dir, ".msgpack", now:, expiry:, active:)
       sweep_dir(Urpc.replies_dir, ".fifo", now:, expiry:, active:)
+      sweep_dir(Urpc.inboxes_dir, ".fifo", now:, expiry:, active:)
     end
 
     def sweep_dir(dir, ext, now:, expiry:, active:)
@@ -463,6 +464,8 @@ module Urpc
 
       inline = (flags & SubmitFrame::SUBMIT_FLAG_INLINE) != 0
       cast = (flags & SubmitFrame::SUBMIT_FLAG_CAST) != 0
+      bidirectional = (flags & SubmitFrame::SUBMIT_FLAG_BIDIRECTIONAL) != 0
+      abort_broker("bidirectional cast not supported") if cast && bidirectional
 
       header_bytes = SubmitFrame::SUBMIT_VERSION_BYTES + SubmitFrame::SUBMIT_FLAGS_BYTES + SubmitFrame::WIRE_ID_BYTES + 1
       header_bytes += SubmitFrame::WAIT_TIMEOUT_BYTES if wait_mode == SubmitFrame::WAIT_TIMEOUT_MS
@@ -485,6 +488,7 @@ module Urpc
         rpc_key: rpc_key,
         method_name: method_name,
         cast: cast,
+        bidirectional: bidirectional,
         wait_for_server: wait_for_server,
         inline: inline,
         body: body,
@@ -570,6 +574,7 @@ module Urpc
               rpc_key: frame[:rpc_key],
               name: frame[:method_name],
               cast: frame[:cast],
+              bidirectional: frame[:bidirectional],
               wait_for_server: frame[:wait_for_server],
             )
           rescue MessagePack::UnpackError, Call::Invalid => e
@@ -582,6 +587,7 @@ module Urpc
               rpc_key: frame[:rpc_key],
               name: frame[:method_name],
               cast: frame[:cast],
+              bidirectional: frame[:bidirectional],
               wait_for_server: frame[:wait_for_server],
             )
           rescue Errno::ENOENT => e
