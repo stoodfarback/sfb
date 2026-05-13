@@ -20,6 +20,26 @@ The key architectural idea is that the server acts through the client for caller
 
 This keeps the design coherent across VM boundaries: the server can run on the host while the CLI client runs inside a VM, and all VM-local filesystem/env/stdin access stays on the client side.
 
+## Implementation Status
+
+The transport foundation already exists:
+
+| Layer | Status |
+|---|---|
+| `Urpc::Client#bidirectional_stream` | Implemented. |
+| `Urpc::EventStream#send_sync` / `send_async` / `close_inbox` | Implemented. |
+| `Urpc::BidirectionalHandler` and `Urpc::Inbox` | Implemented. |
+| Broker-owned inbox FIFO setup and cleanup | Implemented. |
+
+The CLI layer now exists on top of that foundation:
+
+| Layer | Status |
+|---|---|
+| `Urpc::CliCommand` | Implemented. |
+| `bin/urpc-call-cli` Ruby client | Implemented as the reference client. |
+| CLI operation helpers and client operation dispatch | Implemented. |
+| Rust `urpc-call-cli` | Optional follow-up after the Ruby client is covered by tests. |
+
 ## Scope
 
 V1 includes:
@@ -58,7 +78,7 @@ Suggested client options:
 | Option | Meaning |
 |---|---|
 | `--wait-for-server SECONDS` | Wait for a backend to register. Defaults to `5`. |
-| `--root PATH` | Optional override for `URPC_ROOT`. |
+| `--root PATH` | Optional override for `URPC_ROOT`; the client must apply it before the first `Urpc.root` access. |
 
 Command flags such as `--help`, `--files`, `-n`, or `--limit` belong to the server command, not the client.
 
@@ -92,6 +112,10 @@ Fields:
 
 The initial request does not include environment variables. Commands that need client environment values request them with `:read_env` or `:list_env`.
 
+The request must have exactly one positional argument and no keyword arguments. `Urpc::CliCommand` should reject invalid shapes with `ArgumentError` before command-specific parsing runs.
+
+Protocol examples use Ruby symbols for hash keys and enum-like values. On the wire those are sfb MessagePack symbol extension values. Non-Ruby clients must support that extension or explicitly normalize their decoded values to the same Ruby-facing shape.
+
 ## Client Behavior
 
 At a high level, `urpc-call-cli`:
@@ -104,6 +128,8 @@ At a high level, `urpc-call-cli`:
    - `type: :op` → perform the requested client operation and reply with an inbox `:sync` message shaped like `{ type: :op_result, ok:, value: ... }` (or `{ ..., error: ... }`).
 4. On Ctrl-C, sends `{ type: :cancel, reason: :interrupt }` as an inbox `:async` message, then continues streaming until the command exits (or a local grace policy gives up).
 5. Exits with the returned `{ status: Integer }` from the terminal `:return` frame.
+
+The client should treat malformed CLI protocol events as remote protocol failures: print a concise error to stderr, close the inbox, and exit nonzero. This is separate from command usage errors, which are represented by normal stdout/stderr events plus `{ status: 2 }`.
 
 ## Server API
 
@@ -140,7 +166,7 @@ Urpc::StreamServer.new(
 
 This keeps command dispatch in normal Ruby code and matches the existing URPC per-call pattern.
 
-Unknown commands are handled like any other missing URPC method unless the application handler defines its own fallback.
+Unknown commands are handled like any other missing URPC method, except applications can define their own fallback if they want custom command discovery or help.
 
 ### CLI Command
 
@@ -171,6 +197,17 @@ end
 `Urpc::CliCommand` subclasses `Urpc::BidirectionalHandler`.
 
 The `Urpc::CliCommand` base class is responsible for extracting the CLI request hash from `req.args.first` and exposing `version`, `argv`, and `cwd` as attributes. It should raise `ArgumentError` for invalid request shapes.
+
+Required request validation:
+
+| Check | Error |
+|---|---|
+| `req.args.length == 1` | `ArgumentError` |
+| `req.kargs.empty?` | `ArgumentError` |
+| Request is a Hash | `ArgumentError` |
+| `:version == 1` | `ArgumentError` |
+| `:argv` is an Array of String | `ArgumentError` |
+| `:cwd` is a non-empty String | `ArgumentError` |
 
 Suggested base attributes:
 
@@ -207,6 +244,8 @@ end
 
 `perform!` returns a process exit status. `Urpc::CliCommand#run!` wraps that status in the CLI protocol return hash.
 
+Status values should be integers in the normal process range `0..255`; `nil` is treated as `0`. Invalid statuses should raise instead of being silently coerced.
+
 Suggested hooks:
 
 | Hook | Default |
@@ -233,6 +272,20 @@ Suggested helpers:
 | `cancelled?` | Whether interrupt/disconnect cancellation has been requested. |
 
 Command code should use these helpers for caller-side state. It should not assume `cwd` paths exist on the server filesystem.
+
+The filesystem/env/stdin helpers should share one internal operation helper:
+
+```ruby
+def client_op(payload)
+  data(payload.merge(type: :op))
+  result = receive
+  raise("malformed cli op result") if !valid_op_result?(result)
+  raise(result[:error][:message]) if !result[:ok]
+  result[:value]
+end
+```
+
+The exact implementation can be cleaner than this sketch, but the important behavior is that one helper owns operation framing, result validation, and failed operation handling.
 
 ## Response Stream Protocol
 
@@ -328,7 +381,7 @@ Unsupported operations are ordinary failed operation results:
   type: :op_result,
   ok: false,
   error: {
-    exception: "UnsupportedOperation",
+    exception: "ArgumentError",
     message: "unsupported cli op: read_socket",
   },
 }
@@ -387,6 +440,8 @@ Long-running commands should check `cancelled?` at useful boundaries.
 All relative paths and patterns are interpreted by the client relative to the initial `:cwd`.
 
 The protocol is not a security boundary. In intended use, the server is trusted and may ask the client to do anything the CLI protocol supports. The operation set is still explicit so failures are debuggable and future client implementations can report unsupported operations cleanly.
+
+The client should resolve relative paths by joining them to the captured `cwd`, not the process cwd at the moment the operation is handled. Operation result paths should use the same relative/absolute style as the request when practical.
 
 ### `:glob`
 
@@ -521,6 +576,24 @@ This is enough for commands like:
 ```sh
 urpc-call-cli ledger_llm_consolidate_tmp_v1 email_search -
 ```
+
+## Test Coverage
+
+`test/urpc_cli_server_test.rb` covers the Ruby reference path through a real broker, `StreamServer`, and `bin/urpc-call-cli` process:
+
+| Behavior | Covered |
+|---|---|
+| Server-owned help/status `0` | Yes |
+| Validation/status `2` | Yes |
+| stdout/stderr/status forwarding | Yes |
+| Caller-side `glob`, `read_file`, `list_dir`, `read_env`, `list_env`, `read_stdin` | Yes |
+| Raw argv forwarding after command name | Yes |
+| Request shape validation | Yes |
+| Unsupported client operation failure | Yes |
+| Malformed CLI event failure | Yes |
+| Ctrl-C async cancellation | Yes |
+
+Use the Ruby implementation and tests as the contract for any Rust client.
 
 ## Example: Verify
 

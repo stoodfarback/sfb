@@ -8,6 +8,8 @@ module Urpc
   autoload(:Call, "urpc/call")
   autoload(:CallHandler, "urpc/call_handler")
   autoload(:CliCall, "urpc/cli_call")
+  autoload(:CliClient, "urpc/cli_client")
+  autoload(:CliCommand, "urpc/cli_command")
   autoload(:Client, "urpc/client")
   autoload(:Event, "urpc/event")
   autoload(:EventStream, "urpc/event_stream")
@@ -72,5 +74,9 @@ module Urpc
 
   def self.run_call
     CliCall.run
+  end
+
+  def self.run_call_cli
+    CliClient.run
   end
 end
