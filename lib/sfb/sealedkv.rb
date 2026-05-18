@@ -12,24 +12,41 @@ module Sfb
     CLIENT_TIMEOUT_SECONDS = 1
     CLIENT_WAIT_FOR_SERVER_SECONDS = 1
 
+    # Raises on any failure (missing secret, broker down, timeout, decrypt
+    # failure, etc). Errors are not rescued here; the consumer decides how
+    # to handle them and which Urpc errors to distinguish.
     def self.get(secret_name)
-      instance.get(secret_name)
+      caller_location = Thread.each_caller_location(1, 1) { break it }
+      client_for(caller_location).get(secret_name)
     end
 
-    def self.instance
-      @instance ||= Client.new
+    # File-backed callers get one client per source file. Eval/-e/internal
+    # callers have no absolute_path and share a cwd fallback client whose
+    # identity is locked by its first successful discovery.
+    def self.client_for(caller_location)
+      key = caller_location&.absolute_path || :fallback_pwd
+      clients.fetch(key) do
+        clients[key] = Client.new(caller_path: key)
+      end
+    end
+
+    def self.clients
+      @clients ||= {}
     end
 
     def self.reset!
-      @instance = nil
+      @clients = nil
     end
 
     class Client
       extend Sfb::Memo
 
-      # Raises on any failure (missing secret, broker down, timeout, decrypt
-      # failure, etc). Errors are not rescued here; the consumer decides how
-      # to handle them and which Urpc errors to distinguish.
+      attr_accessor(:caller_path)
+
+      def initialize(caller_path:)
+        self.caller_path = caller_path
+      end
+
       def get(secret_name)
         secret_name = Sfb::Sealedkv.validate_name!("secret name", secret_name)
         identity = self.identity
@@ -44,7 +61,7 @@ module Sfb
         )
       end
 
-      memo def identity = ProjectIdentity.discover
+      memo def identity = ProjectIdentity.discover(caller_path:)
 
       memo def urpc = Urpc::Client.new(
         RPC_KEY,
@@ -74,13 +91,21 @@ module Sfb
         end
       end
 
-      def self.discover(start_dir: Dir.pwd)
-        path = find_path(start_dir:)
-        if !path
-          raise("no #{Sfb::Sealedkv::CONFIG_FILE} found at or above #{File.expand_path(start_dir)}")
+      def self.discover(caller_path:)
+        if caller_path != :fallback_pwd
+          caller_start_dir = File.dirname(caller_path)
+          path = find_path(start_dir: caller_start_dir)
+          return(load(path)) if path
         end
 
-        load(path)
+        cwd_start_dir = Dir.pwd
+        path = find_path(start_dir: cwd_start_dir)
+        return(load(path)) if path
+
+        searched_locations = []
+        searched_locations << "caller #{File.expand_path(caller_start_dir)}" if caller_start_dir
+        searched_locations << "cwd #{File.expand_path(cwd_start_dir)}"
+        raise("no #{Sfb::Sealedkv::CONFIG_FILE} found at or above #{searched_locations.join(" or ")}")
       end
 
       def self.find_path(start_dir: Dir.pwd)

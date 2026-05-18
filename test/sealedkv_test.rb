@@ -50,6 +50,58 @@ class SealedkvTest < Minitest::Test
     end
   end
 
+  def test_get_discovers_identity_from_immediate_caller_file_before_working_directory
+    Dir.mktmpdir("sfb-sealedkv") do |root_dir|
+      project_dir = File.join(root_dir, "project")
+      caller_dir = File.join(project_dir, "lib")
+      cwd_dir = File.join(root_dir, "cwd")
+      Dir.mkdir(project_dir)
+      Dir.mkdir(caller_dir)
+      Dir.mkdir(cwd_dir)
+
+      key = Sfb::Sealedkv::Sodium.random_bytes(Sfb::Sealedkv::KEY_BYTES)
+      write_identity(project_dir, project_name: "callerproj", key:)
+      caller = load_sealedkv_caller(caller_dir)
+      secret = "from caller"
+      blob = encrypted_blob(project_name: "callerproj", secret_name: "api_key", key:, secret:)
+
+      with_broker do
+        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ ["callerproj", "api_key"] => blob }))
+        wait_for_backend(Sfb::Sealedkv::RPC_KEY)
+
+        with_chdir(cwd_dir) do
+          assert_equal(secret, caller.get_secret("api_key"))
+        end
+      end
+    end
+  end
+
+  def test_get_falls_back_to_working_directory_when_caller_tree_has_no_identity
+    Dir.mktmpdir("sfb-sealedkv") do |root_dir|
+      caller_root_dir = File.join(root_dir, "caller")
+      caller_dir = File.join(caller_root_dir, "lib")
+      cwd_project_dir = File.join(root_dir, "cwd_project")
+      Dir.mkdir(caller_root_dir)
+      Dir.mkdir(caller_dir)
+      Dir.mkdir(cwd_project_dir)
+
+      key = Sfb::Sealedkv::Sodium.random_bytes(Sfb::Sealedkv::KEY_BYTES)
+      write_identity(cwd_project_dir, project_name: "cwdproj", key:)
+      caller = load_sealedkv_caller(caller_dir)
+      secret = "from cwd"
+      blob = encrypted_blob(project_name: "cwdproj", secret_name: "token", key:, secret:)
+
+      with_broker do
+        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ ["cwdproj", "token"] => blob }))
+        wait_for_backend(Sfb::Sealedkv::RPC_KEY)
+
+        with_chdir(cwd_project_dir) do
+          assert_equal(secret, caller.get_secret("token"))
+        end
+      end
+    end
+  end
+
   def test_get_does_not_cache_successful_reads
     Dir.mktmpdir("sfb-sealedkv") do |dir|
       key = Sfb::Sealedkv::Sodium.random_bytes(Sfb::Sealedkv::KEY_BYTES)
@@ -66,6 +118,49 @@ class SealedkvTest < Minitest::Test
         with_chdir(dir) do
           assert_equal("first", Sfb::Sealedkv.get("token"))
           assert_equal("second", Sfb::Sealedkv.get("token"))
+        end
+      end
+    end
+  end
+
+  def test_get_caches_identity_by_immediate_caller_file
+    Dir.mktmpdir("sfb-sealedkv") do |root_dir|
+      cwd_dir = File.join(root_dir, "cwd")
+      project_a_dir = File.join(root_dir, "project_a")
+      project_b_dir = File.join(root_dir, "project_b")
+      caller_a_dir = File.join(project_a_dir, "lib")
+      caller_b_dir = File.join(project_b_dir, "lib")
+      Dir.mkdir(cwd_dir)
+      Dir.mkdir(project_a_dir)
+      Dir.mkdir(project_b_dir)
+      Dir.mkdir(caller_a_dir)
+      Dir.mkdir(caller_b_dir)
+
+      key_a = Sfb::Sealedkv::Sodium.random_bytes(Sfb::Sealedkv::KEY_BYTES)
+      key_b = Sfb::Sealedkv::Sodium.random_bytes(Sfb::Sealedkv::KEY_BYTES)
+      write_identity(project_a_dir, project_name: "proja", key: key_a)
+      write_identity(project_b_dir, project_name: "projb", key: key_b)
+      caller_a = load_sealedkv_caller(caller_a_dir)
+      caller_b = load_sealedkv_caller(caller_b_dir)
+
+      blobs = {
+        ["proja", "token"] => encrypted_blob(project_name: "proja", secret_name: "token", key: key_a, secret: "first"),
+        ["projb", "token"] => encrypted_blob(project_name: "projb", secret_name: "token", key: key_b, secret: "second"),
+      }
+
+      with_broker do
+        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new(blobs))
+        wait_for_backend(Sfb::Sealedkv::RPC_KEY)
+
+        with_chdir(cwd_dir) do
+          assert_equal("first", caller_a.get_secret("token"))
+          File.binwrite(
+            File.join(project_a_dir, Sfb::Sealedkv::CONFIG_FILE),
+            JSON.generate({ "project" => "proja", "key" => "not-a-sealedkv-key" })
+          )
+
+          assert_equal("second", caller_b.get_secret("token"))
+          assert_equal("first", caller_a.get_secret("token"))
         end
       end
     end
@@ -167,6 +262,20 @@ class SealedkvTest < Minitest::Test
 
   def encrypted_blob(project_name:, secret_name:, key:, secret:)
     Sfb::Sealedkv::Crypto.encrypt_value(project_name:, secret_name:, key:, secret:)
+  end
+
+  def load_sealedkv_caller(dir)
+    path = File.join(dir, "sealedkv_caller.rb")
+    File.binwrite(path, <<~RUBY)
+      $sfb_sealedkv_test_callers ||= {}
+      $sfb_sealedkv_test_callers[__FILE__] = Module.new do
+        def self.get_secret(secret_name)
+          Sfb::Sealedkv.get(secret_name)
+        end
+      end
+    RUBY
+    load(path)
+    $sfb_sealedkv_test_callers.fetch(path)
   end
 
   def with_chdir(dir)
