@@ -15,4 +15,5 @@ module Sfb
   autoload(:Test, "sfb/test")
   autoload(:TestRunner, "sfb/test_runner")
   autoload(:LsbClient, "sfb/lsb_client")
+  autoload(:Sealedkv, "sfb/sealedkv")
 end
