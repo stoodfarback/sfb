@@ -42,7 +42,7 @@ module Urpc
 
       broker.mark_call_dispatched(call)
 
-      sink = call.cast? ? ResponseStream::Sinks::Null.new : ResponseStream::Sinks::Fifo.new(call.reply_io)
+      sink = call.cast? ? ResponseStream::Sinks::Null.new : BrokerCall::ReplySink.new(call)
       sink = MonitorSink.new(sink: sink, broker: broker, call: call)
       stream = ResponseStream.new(sink: sink)
       begin

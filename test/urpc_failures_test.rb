@@ -51,7 +51,7 @@ class UrpcFailuresTest < Minitest::Test
   def test_internal_response_stream_can_error_after_unencodable_return
     with_broker do
       io = StringIO.new
-      stream = Urpc::ResponseStream.new(sink: Urpc::ResponseStream::Sinks::Fifo.new(io))
+      stream = Urpc::ResponseStream.new(sink: Urpc::ResponseStream::Sinks::Socket.new(io))
 
       e = assert_raises(NoMethodError) { stream.return(Object.new) }
       assert_match(/to_msgpack/, e.message)

@@ -240,12 +240,17 @@ module Urpc
     end
 
     def register_introspection_backend
-      backend = InternalBackend.new(key: RESERVED_KEY, broker: self, handler: Introspection.new(self))
+      register_internal_backend(RESERVED_KEY, Introspection.new(self))
+    end
+
+    def register_internal_backend(key, handler)
+      backend = InternalBackend.new(key:, broker: self, handler:)
       state_lock.synchronize do
-        queues_by_key[RESERVED_KEY] ||= Queue.new
-        (internal_backends_by_key[RESERVED_KEY] ||= []) << backend
+        queues_by_key[key] ||= Queue.new
+        (internal_backends_by_key[key] ||= []) << backend
       end
       backend.start
+      backend
     end
 
     def unregister_internal_backend(backend)
@@ -711,7 +716,9 @@ module Urpc
       end
 
       begin
-        write_error_frame(call.id, call.reply_io, exception_class, message)
+        frame = Frames.error_frame(exception_class.new(message))
+        broadcast_monitor_response(call.id, frame)
+        call.write_terminal_reply_frame(frame)
       ensure
         finish_call(call)
       end

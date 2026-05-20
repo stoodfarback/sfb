@@ -75,28 +75,6 @@ module Urpc
         end
       end
 
-      class Fifo
-        attr_accessor(:io)
-
-        def initialize(io)
-          self.io = io
-        end
-
-        def write_response(type, value)
-          io.write(Frames.pack(type, value))
-          io.flush
-        rescue Errno::EPIPE
-          nil
-        end
-
-        def write_error(exception)
-          io.write(Frames.pack_error(exception))
-          io.flush
-        rescue Errno::EPIPE
-          nil
-        end
-      end
-
       class Null
         def write_response(_type, _value); end
         def write_error(_exception); end

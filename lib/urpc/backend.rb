@@ -62,7 +62,7 @@ module Urpc
           raise(MessagePack::UnpackError, "malformed backend frame") if !Frames.valid_backend_response_frame?(frame)
           type = frame[0]
           broker.broadcast_monitor_response(call, frame)
-          call.write_reply_frame(frame)
+          call.write_response_frame(frame)
           if call.cast? && type == :error
             warn("urpc broker: cast to #{key} returned error: #{frame.inspect}")
           end
@@ -87,7 +87,7 @@ module Urpc
     def synthesize_backend_died(call, error)
       frame = Frames.error_frame(RemoteException.new("backend connection lost: #{error.class} #{error.message}"))
       broker.broadcast_monitor_response(call, frame)
-      call.write_reply_frame(frame)
+      call.write_terminal_reply_frame(frame)
     ensure
       call.close_reply_io
     end

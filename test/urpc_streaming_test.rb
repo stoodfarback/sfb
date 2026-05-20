@@ -1,8 +1,47 @@
 # frozen_string_literal: true
 
 require_relative("urpc_test_helper")
+require("timeout")
 
 class UrpcStreamingTest < Minitest::Test
+  def wait_for_queue(queue, message)
+    Timeout.timeout(2) { queue.pop }
+  rescue Timeout::Error
+    flunk(message)
+  end
+
+  def poll_until_for(seconds)
+    end_at = Time.now + seconds
+    while Time.now < end_at
+      return true if yield
+      sleep(0.01)
+    end
+    false
+  end
+
+  def start_fake_backend(rpc_key, &block)
+    thread = Thread.new do
+      sock = UNIXSocket.open(Urpc.broker_sock)
+      sock.write(MessagePack.pack(rpc_key))
+      unpacker = MessagePack::DefaultFactory.unpacker(sock)
+      block.call(sock, unpacker)
+    ensure
+      sock&.close rescue nil
+    end
+    thread.report_on_exception = false
+    thread
+  end
+
+  def start_internal_backend(rpc_key, handler)
+    @broker.register_internal_backend(rpc_key, handler)
+  end
+
+  def large_reply_payload_for(io)
+    io.fcntl(Fcntl::F_SETPIPE_SZ, 4096) rescue nil
+    capacity = io.fcntl(Fcntl::F_GETPIPE_SZ) rescue 1_000_000
+    "x" * [capacity * 2, 2_000_000].max
+  end
+
   def emitter_handler
     Class.new do
       def emit_three(req)
@@ -29,6 +68,124 @@ class UrpcStreamingTest < Minitest::Test
       def boom = raise(ArgumentError, "kaboom")
       def slow(ms) = (sleep(ms / 1000.0); "slow-done")
     end.new
+  end
+
+  def test_internal_backend_terminal_reply_drains_without_occupying_worker
+    with_broker do
+      first_payload = Queue.new
+      second_request = Queue.new
+      key = "internal_async_terminal_drain"
+      handler = Object.new
+      handler.define_singleton_method(:large_return) do |req|
+        req.stream.return(first_payload.pop)
+      end
+      handler.define_singleton_method(:ping) do |req|
+        second_request << true
+        req.stream.return("second-ok")
+      end
+
+      start_internal_backend(key, handler)
+      wait_for_backend(key)
+
+      first_stream = Urpc::Client.new(key, timeout: 5).stream(:large_return)
+      first_reply_path = first_stream.call.reply_path
+      first_payload << large_reply_payload_for(first_stream.reply_io)
+
+      assert_equal("second-ok", Urpc::Client.new(key, timeout: 5).call(:ping))
+      assert(wait_for_queue(second_request, "internal backend did not receive second request"))
+      assert(poll_until { !File.exist?(first_reply_path) }, "first reply fifo should be unlinked")
+    ensure
+      first_stream&.close rescue nil
+    end
+  end
+
+  def test_blocked_terminal_reply_drains_without_occupying_backend_worker
+    with_broker do
+      first_request = Queue.new
+      first_payload = Queue.new
+      second_request = Queue.new
+      key = "async_terminal_drain"
+
+      backend_thread = start_fake_backend(key) do |sock, unpacker|
+        first_request << unpacker.read
+        sock.write(MessagePack.pack(Urpc::Frames.frame(:return, first_payload.pop)))
+        second_request << unpacker.read
+        sock.write(MessagePack.pack(Urpc::Frames.frame(:return, "second-ok")))
+      end
+
+      wait_for_backend(key)
+
+      first_stream = Urpc::Client.new(key, timeout: 5).stream(:first)
+      request = wait_for_queue(first_request, "backend did not receive first request")
+      assert_equal(:first, request[:name])
+
+      first_reply_path = first_stream.call.reply_path
+      first_payload << large_reply_payload_for(first_stream.reply_io)
+
+      assert_equal("second-ok", Urpc::Client.new(key, timeout: 5).call(:second))
+      request = wait_for_queue(second_request, "backend did not receive second request")
+      assert_equal(:second, request[:name])
+      assert(poll_until { !File.exist?(first_reply_path) }, "first reply fifo should be unlinked")
+    ensure
+      first_stream&.close rescue nil
+      backend_thread&.join(1) rescue nil
+      backend_thread&.kill rescue nil
+    end
+  end
+
+  def test_nonterminal_reply_frames_keep_synchronous_backpressure
+    with_broker do
+      first_request = Queue.new
+      first_payload = Queue.new
+      second_request = Queue.new
+      second_result = Queue.new
+      key = "sync_data_backpressure"
+
+      backend_thread = start_fake_backend(key) do |sock, unpacker|
+        first_request << unpacker.read
+        sock.write(MessagePack.pack(Urpc::Frames.frame(:data, first_payload.pop)))
+        sock.write(MessagePack.pack(Urpc::Frames.frame(:return, "first-ok")))
+        second_request << unpacker.read
+        sock.write(MessagePack.pack(Urpc::Frames.frame(:return, "second-ok")))
+      end
+
+      wait_for_backend(key)
+
+      first_stream = Urpc::Client.new(key, timeout: 5).stream(:first)
+      request = wait_for_queue(first_request, "backend did not receive first request")
+      assert_equal(:first, request[:name])
+
+      payload = large_reply_payload_for(first_stream.reply_io)
+      first_payload << payload
+      assert(first_stream.reply_io.wait_readable(2), "data frame did not reach reply fifo")
+
+      second_thread = Thread.new do
+        second_result << Urpc::Client.new(key, timeout: 5).call(:second)
+      rescue => e
+        second_result << e
+      end
+      second_thread.report_on_exception = false
+
+      refute(
+        poll_until_for(0.25) { !second_request.empty? || !second_result.empty? },
+        "data frame should keep the backend worker blocked until the first stream is closed or drained",
+      )
+
+      event = first_stream.next_event
+      assert_equal(:data, event.type)
+      assert_equal(payload.bytesize, event.data.bytesize)
+      assert_equal("first-ok", first_stream.result)
+
+      request = wait_for_queue(second_request, "backend did not receive second request after data backpressure released")
+      assert_equal(:second, request[:name])
+      assert_equal("second-ok", wait_for_queue(second_result, "second request did not finish"))
+    ensure
+      first_stream&.close rescue nil
+      second_thread&.join(1) rescue nil
+      second_thread&.kill rescue nil
+      backend_thread&.join(1) rescue nil
+      backend_thread&.kill rescue nil
+    end
   end
 
   def test_next_event_ignores_finished_stream
