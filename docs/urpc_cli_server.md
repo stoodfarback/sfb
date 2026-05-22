@@ -57,11 +57,12 @@ V1 includes:
 | Caller-side `read_env` | Included |
 | Caller-side `list_env` | Included |
 | Caller-side `read_stdin` | Included |
+| Caller-side stdio TTY checks | Included |
 | TTY/raw keyboard mode | Deferred |
 | Semantic keyboard events | Deferred |
 | Caller-side writes | Deferred |
 
-TTY behavior is intentionally out of scope for this layer. A future TUI-focused server/client can handle raw terminal mode, keyboard events, PTYs, resize handling, and richer interactive semantics.
+Raw TTY behavior is intentionally out of scope for this layer. A future TUI-focused server/client can handle raw terminal mode, keyboard events, PTYs, resize handling, and richer interactive semantics.
 
 ## Command Line
 
@@ -269,6 +270,9 @@ Suggested helpers:
 | `read_env(name)` | Ask client for one environment variable. |
 | `list_env(include_values: false)` | Ask client for environment names or values. |
 | `read_stdin` | Ask client to read remaining stdin. |
+| `stdin_tty?` | Ask whether client stdin is a TTY. |
+| `stdout_tty?` | Ask whether client stdout is a TTY. |
+| `stderr_tty?` | Ask whether client stderr is a TTY. |
 | `cancelled?` | Whether interrupt/disconnect cancellation has been requested. |
 
 Command code should use these helpers for caller-side state. It should not assume `cwd` paths exist on the server filesystem.
@@ -577,6 +581,19 @@ This is enough for commands like:
 urpc-call-cli ledger_llm_consolidate_tmp_v1 email_search -
 ```
 
+### `:stdin_tty`, `:stdout_tty`, `:stderr_tty`
+
+Request:
+
+```ruby
+{
+  type: :op,
+  op: :stdout_tty,
+}
+```
+
+Result value is true if the corresponding caller-side stdio stream is a TTY. It is false when the stream is not a TTY or when the stream is closed.
+
 ## Test Coverage
 
 `test/urpc_cli_server_test.rb` covers the Ruby reference path through a real broker, `StreamServer`, and `bin/urpc-call-cli` process:
@@ -587,6 +604,7 @@ urpc-call-cli ledger_llm_consolidate_tmp_v1 email_search -
 | Validation/status `2` | Yes |
 | stdout/stderr/status forwarding | Yes |
 | Caller-side `glob`, `read_file`, `list_dir`, `read_env`, `list_env`, `read_stdin` | Yes |
+| Caller-side stdio TTY checks | Yes |
 | Raw argv forwarding after command name | Yes |
 | Request shape validation | Yes |
 | Unsupported client operation failure | Yes |

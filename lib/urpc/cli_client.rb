@@ -165,6 +165,12 @@ module Urpc
         op_list_env(event)
       when :read_stdin
         op_read_stdin
+      when :stdin_tty
+        op_tty($stdin)
+      when :stdout_tty
+        op_tty($stdout)
+      when :stderr_tty
+        op_tty($stderr)
       else
         raise(ArgumentError, "unsupported cli op: #{event[:op]}")
       end
@@ -203,6 +209,12 @@ module Urpc
       return "" if stdin_consumed
       self.stdin_consumed = true
       $stdin.read || ""
+    end
+
+    def op_tty(io)
+      io.tty?
+    rescue IOError
+      false
     end
 
     def file_type(path)

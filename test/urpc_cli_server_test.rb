@@ -56,6 +56,18 @@ class UrpcCliServerTest < Minitest::Test
     end
   end
 
+  class TtyCommand < Urpc::CliCommand
+    def perform!
+      payload = {
+        stdin_tty: stdin_tty?,
+        stdout_tty: stdout_tty?,
+        stderr_tty: stderr_tty?,
+      }
+      stdout(JSON.generate(payload))
+      0
+    end
+  end
+
   class UnsupportedOpCommand < Urpc::CliCommand
     def perform!
       client_op(op: :read_socket)
@@ -107,6 +119,10 @@ class UrpcCliServerTest < Minitest::Test
 
     def workspace_cmd(req)
       req.handle_bidirectional!(WorkspaceCommand, command_name: __method__)
+    end
+
+    def tty_cmd(req)
+      req.handle_bidirectional!(TtyCommand, command_name: __method__)
     end
 
     def unsupported_op_cmd(req)
@@ -228,6 +244,46 @@ class UrpcCliServerTest < Minitest::Test
       e = assert_raises(ArgumentError) { stream.result }
       assert_match(/unsupported cli protocol version/, e.message)
     end
+  end
+
+  def test_tty_helpers_report_piped_stdio_false
+    with_broker do
+      key = start_cli_server
+
+      stdout, stderr, status = call_cli(key, "tty_cmd")
+
+      assert(status.success?, stderr)
+      assert_equal("", stderr)
+      data = JSON.parse(stdout)
+      assert_equal(false, data["stdin_tty"])
+      assert_equal(false, data["stdout_tty"])
+      assert_equal(false, data["stderr_tty"])
+    end
+  end
+
+  def test_tty_client_operations_report_closed_stdio_false
+    old_stdin = $stdin
+    old_stdout = $stdout
+    old_stderr = $stderr
+    $stdin = closed_io
+    $stdout = closed_io
+    $stderr = closed_io
+
+    client = Urpc::CliClient.new([])
+    assert_equal(false, client.operation_value(op: :stdin_tty))
+    assert_equal(false, client.operation_value(op: :stdout_tty))
+    assert_equal(false, client.operation_value(op: :stderr_tty))
+  ensure
+    $stdin = old_stdin
+    $stdout = old_stdout
+    $stderr = old_stderr
+  end
+
+  def closed_io
+    read, write = IO.pipe
+    read.close
+    write.close
+    read
   end
 
   def test_unsupported_client_operation_returns_remote_error

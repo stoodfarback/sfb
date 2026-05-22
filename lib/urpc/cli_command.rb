@@ -100,6 +100,18 @@ module Urpc
       client_op(op: :read_stdin)
     end
 
+    def stdin_tty?
+      client_op(op: :stdin_tty)
+    end
+
+    def stdout_tty?
+      client_op(op: :stdout_tty)
+    end
+
+    def stderr_tty?
+      client_op(op: :stderr_tty)
+    end
+
     def cancelled?
       cancel_requested == true
     end
