@@ -200,6 +200,27 @@ class UrpcFailuresTest < Minitest::Test
     end
   end
 
+  def test_stream_server_does_not_warn_about_reconnect_after_shutdown
+    with_broker do
+      handler = Object.new
+      server = Urpc::StreamServer.new("shutdown_reconnect_warning", handler)
+      thread = Thread.new { server.run }
+      thread.report_on_exception = false
+      @server_threads << thread
+
+      wait_for_backend("shutdown_reconnect_warning")
+      $stderr.string = ""
+
+      server.shutdown = true
+      server.sock&.close rescue nil
+
+      raise("server did not stop") if !thread.join(1)
+      thread.value
+
+      refute_match(/connection lost/, $stderr.string)
+    end
+  end
+
   def test_backend_registration_creates_queue_before_worker_start
     with_broker do
       broker = Urpc::Broker.new

@@ -17,6 +17,7 @@ module Urpc
       backoff = BACKOFF_BASE
       loop do
         break if shutdown
+        connection_error = nil
         begin
           self.sock = UNIXSocket.open(Urpc.broker_sock)
           sock.write(MessagePack.pack(rpc_key))
@@ -28,12 +29,15 @@ module Urpc
           end
         rescue Errno::ENOENT, Errno::ECONNREFUSED, Errno::ECONNRESET,
                Errno::EPIPE, IOError, MessagePack::UnpackError => e
-          warn("urpc server [#{rpc_key}]: connection lost: #{e.class} #{e.message}, reconnecting...")
+          connection_error = e
         ensure
           sock&.close rescue nil
           self.sock = nil
         end
         break if shutdown
+        if connection_error
+          warn("urpc server [#{rpc_key}]: connection lost: #{connection_error.class} #{connection_error.message}, reconnecting...")
+        end
         jitter = backoff * (0.5 + (rand * 0.5))
         sleep(jitter)
         backoff = [backoff * 2, BACKOFF_CAP].min
