@@ -27,6 +27,7 @@ autoload(:Fiddle, "fiddle")
 autoload(:Redis, "redis")
 autoload(:XXhash, "xxhash")
 autoload(:SecureRandom, "securerandom")
+autoload(:Singleton, "singleton")
 module Base32; autoload(:Crockford, "base32/crockford"); end
 autoload(:HTTP, "http")
 autoload(:Nokogiri, "nokogiri")
