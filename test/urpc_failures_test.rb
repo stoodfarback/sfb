@@ -338,15 +338,18 @@ class UrpcFailuresTest < Minitest::Test
 
   def test_preflight_broker_unavailable_missing_root
     with_broker do
+      moved_root = "#{Urpc.root}.missing"
       @broker.stop
       sleep(0.05)
-      FileUtils.rm_rf(Urpc.root)
+      FileUtils.mv(Urpc.root, moved_root)
 
-      client = Urpc::Client.new("whatever", timeout: 1)
-      e = assert_raises(Urpc::BrokerUnavailable) { client.call(:echo, "hi") }
-      assert_match(/root/i, e.message)
-
-      FileUtils.mkdir_p(Urpc.root)
+      begin
+        client = Urpc::Client.new("whatever", timeout: 1)
+        e = assert_raises(Urpc::BrokerUnavailable) { client.call(:echo, "hi") }
+        assert_match(/root/i, e.message)
+      ensure
+        FileUtils.mv(moved_root, Urpc.root) if File.directory?(moved_root)
+      end
     end
   end
 
