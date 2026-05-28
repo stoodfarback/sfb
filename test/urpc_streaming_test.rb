@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative("urpc_test_helper")
-require("timeout")
 
 class UrpcStreamingTest < Minitest::Test
   def wait_for_queue(queue, message)

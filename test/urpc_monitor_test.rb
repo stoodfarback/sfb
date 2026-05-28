@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative("urpc_test_helper")
-require("timeout")
 
 class UrpcMonitorTest < Minitest::Test
   def test_monitor_receives_rpc_calls
