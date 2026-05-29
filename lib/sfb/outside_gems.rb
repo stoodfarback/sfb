@@ -28,6 +28,7 @@ autoload(:Redis, "redis")
 autoload(:XXhash, "xxhash")
 autoload(:SecureRandom, "securerandom")
 autoload(:Singleton, "singleton")
+autoload(:StringIO, "stringio")
 module Base32; autoload(:Crockford, "base32/crockford"); end
 autoload(:HTTP, "http")
 autoload(:Nokogiri, "nokogiri")
