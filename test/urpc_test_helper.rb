@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require("sfb")
-require("minitest/mock")
 require("minitest/autorun")
 
 class Minitest::Test

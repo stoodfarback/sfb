@@ -22,6 +22,12 @@ module ActiveSupport
   autoload(:Duration, "active_support/duration")
 end
 
+if defined?(Minitest)
+  require("sfb/minitest_setup")
+else
+  autoload(:Minitest, "sfb/minitest_setup")
+end
+
 autoload(:Base64, "base64")
 autoload(:Fiddle, "fiddle")
 autoload(:Redis, "redis")
