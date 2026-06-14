@@ -431,7 +431,7 @@ module Urpc
 
       flags = in_read.getbyte
       return if !flags
-      abort_broker("unknown submit flag bits: 0x%02x" % flags) if (flags & ~SubmitFrame::KNOWN_SUBMIT_FLAGS) != 0
+      abort_broker(format("unknown submit flag bits: 0x%02x", flags)) if (flags & ~SubmitFrame::KNOWN_SUBMIT_FLAGS) != 0
 
       id_bin = read_exact(SubmitFrame::WIRE_ID_BYTES)
       return if !id_bin
@@ -530,7 +530,7 @@ module Urpc
       formatted_kargs = call.kargs.empty? ? nil : call.kargs.map { "#{it[0]}: #{it[1].inspect}" }.join(", ")
       all_args = [formatted_args, formatted_kargs].compact.reject(&:empty?).join(", ")
       type = call.cast? ? "CAST" : "CALL"
-      line = "[#{'%.6f' % Time.now.to_f}] [#{call.id[0..7]}] #{type} #{call.rpc_key} ##{call.name}(#{all_args})\n"
+      line = "[#{format("%.6f", Time.now.to_f)}] [#{call.id[0..7]}] #{type} #{call.rpc_key} ##{call.name}(#{all_args})\n"
       broadcast_monitor_line(line)
     end
 
@@ -540,7 +540,7 @@ module Urpc
       type, raw_payload = frame
       response_type = MONITOR_RESPONSE_TYPES.fetch(type)
       preview = monitor_payload_preview(raw_payload)
-      line = "[#{'%.6f' % Time.now.to_f}] {#{id[0..7]}} #{response_type} #{preview}\n"
+      line = "[#{format("%.6f", Time.now.to_f)}] {#{id[0..7]}} #{response_type} #{preview}\n"
       broadcast_monitor_line(line)
     end
 

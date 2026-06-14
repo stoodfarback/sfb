@@ -149,11 +149,11 @@ class UrpcCliServerTest < Minitest::Test
     key
   end
 
-  def call_cli(*args, chdir: nil, stdin_data: "", env: {})
+  def call_cli(*, chdir: nil, stdin_data: "", env: {})
     bin = File.expand_path("../bin/urpc-call-cli", __dir__)
     options = { stdin_data: stdin_data }
     options[:chdir] = chdir if chdir
-    Open3.capture3({ "URPC_ROOT" => Urpc.root }.merge(env), bin, *args, **options)
+    Open3.capture3({ "URPC_ROOT" => Urpc.root }.merge(env), bin, *, **options)
   end
 
   def test_help_is_owned_by_server_command

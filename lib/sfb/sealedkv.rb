@@ -16,7 +16,7 @@ module Sfb
     # failure, etc). Errors are not rescued here; the consumer decides how
     # to handle them and which Urpc errors to distinguish.
     def self.get(secret_name)
-      caller_location = Thread.each_caller_location(1, 1) { break it }
+      caller_location = caller_locations(1, 1).first
       client_for(caller_location).get(secret_name)
     end
 
@@ -39,7 +39,7 @@ module Sfb
     end
 
     class Client
-      extend Sfb::Memo
+      extend(Sfb::Memo)
 
       attr_accessor(:caller_path)
 
@@ -63,11 +63,13 @@ module Sfb
 
       memo def identity = ProjectIdentity.discover(caller_path:)
 
-      memo def urpc = Urpc::Client.new(
-        RPC_KEY,
-        timeout: CLIENT_TIMEOUT_SECONDS,
-        wait_for_server: CLIENT_WAIT_FOR_SERVER_SECONDS
-      )
+      memo def urpc
+        Urpc::Client.new(
+          RPC_KEY,
+          timeout: CLIENT_TIMEOUT_SECONDS,
+          wait_for_server: CLIENT_WAIT_FOR_SERVER_SECONDS,
+        )
+      end
     end
 
     def self.validate_name!(kind, value)
@@ -137,7 +139,7 @@ module Sfb
           raise(ArgumentError, "#{Sfb::Sealedkv::CONFIG_FILE} must contain a JSON object")
         end
 
-        if data.keys.sort != ["key", "project"]
+        if data.keys.sort != %w[key project]
           raise(ArgumentError, "#{Sfb::Sealedkv::CONFIG_FILE} must contain exactly project and key fields")
         end
 

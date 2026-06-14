@@ -26,7 +26,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_passing_stdout_and_stderr_are_suppressed
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -46,7 +46,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_failing_tests_print_bracketed_captured_output_to_stderr
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -67,7 +67,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_silent_failing_test_omits_capture_brackets
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -84,7 +84,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_stdout_and_stderr_share_ordered_capture_buffer
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -103,7 +103,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_class_level_opt_out_passes_output_through
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -125,7 +125,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_method_level_opt_out_passes_only_selected_method_output_through
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -151,7 +151,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_env_var_disables_capture
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY', env: { "SFB_SKIP_OUTPUT_CAPTURE" => "1" })
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY, env: { "SFB_SKIP_OUTPUT_CAPTURE" => "1" })
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -171,7 +171,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_child_process_and_direct_fd_output_are_captured
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -198,7 +198,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_libc_buffered_output_is_flushed_into_capture
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("fiddle")
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
@@ -217,7 +217,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_teardown_failure_prints_body_and_teardown_output
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -241,7 +241,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_skipped_tests_discard_output
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY')
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY)
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 
@@ -259,7 +259,7 @@ class TestOutputCaptureTest < Minitest::Test
   end
 
   def test_parallelized_tests_raise_clear_error
-    stdout, stderr, status = run_minitest_snippet(<<~'RUBY', env: { "MT_CPU" => "2" })
+    stdout, stderr, status = run_minitest_snippet(<<~RUBY, env: { "MT_CPU" => "2" })
       require("minitest/autorun")
       Sfb::Test::OutputCapture.setup!
 

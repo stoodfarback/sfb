@@ -7,7 +7,7 @@ class MinitestSetupTest < Minitest::Test
   LIB_DIR = File.join(ROOT, "lib")
 
   def test_require_minitest_after_sfb_includes_stub
-    data = run_ruby(<<~'RUBY')
+    data = run_ruby(<<~RUBY)
       require("sfb")
       require("minitest")
 
@@ -22,7 +22,7 @@ class MinitestSetupTest < Minitest::Test
   end
 
   def test_require_minitest_autorun_after_sfb_includes_stub
-    data = run_ruby(<<~'RUBY')
+    data = run_ruby(<<~RUBY)
       require("sfb")
       require("minitest/autorun")
 
@@ -39,7 +39,7 @@ class MinitestSetupTest < Minitest::Test
   end
 
   def test_require_sfb_after_minitest_includes_stub
-    data = run_ruby(<<~'RUBY')
+    data = run_ruby(<<~RUBY)
       require("minitest")
       before = Object.method_defined?(:stub)
 

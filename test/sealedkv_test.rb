@@ -38,7 +38,7 @@ class SealedkvTest < Minitest::Test
       blob = encrypted_blob(project_name: "proj", secret_name: "api_key", key:, secret:)
 
       with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ ["proj", "api_key"] => blob }))
+        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[proj api_key] => blob }))
         wait_for_backend(Sfb::Sealedkv::RPC_KEY)
 
         nested_dir = File.join(dir, "nested")
@@ -66,7 +66,7 @@ class SealedkvTest < Minitest::Test
       blob = encrypted_blob(project_name: "callerproj", secret_name: "api_key", key:, secret:)
 
       with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ ["callerproj", "api_key"] => blob }))
+        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[callerproj api_key] => blob }))
         wait_for_backend(Sfb::Sealedkv::RPC_KEY)
 
         with_chdir(cwd_dir) do
@@ -92,7 +92,7 @@ class SealedkvTest < Minitest::Test
       blob = encrypted_blob(project_name: "cwdproj", secret_name: "token", key:, secret:)
 
       with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ ["cwdproj", "token"] => blob }))
+        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[cwdproj token] => blob }))
         wait_for_backend(Sfb::Sealedkv::RPC_KEY)
 
         with_chdir(cwd_project_dir) do
@@ -112,7 +112,7 @@ class SealedkvTest < Minitest::Test
       ]
 
       with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ ["proj", "token"] => blobs }))
+        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[proj token] => blobs }))
         wait_for_backend(Sfb::Sealedkv::RPC_KEY)
 
         with_chdir(dir) do
@@ -144,8 +144,8 @@ class SealedkvTest < Minitest::Test
       caller_b = load_sealedkv_caller(caller_b_dir)
 
       blobs = {
-        ["proja", "token"] => encrypted_blob(project_name: "proja", secret_name: "token", key: key_a, secret: "first"),
-        ["projb", "token"] => encrypted_blob(project_name: "projb", secret_name: "token", key: key_b, secret: "second"),
+        %w[proja token] => encrypted_blob(project_name: "proja", secret_name: "token", key: key_a, secret: "first"),
+        %w[projb token] => encrypted_blob(project_name: "projb", secret_name: "token", key: key_b, secret: "second"),
       }
 
       with_broker do

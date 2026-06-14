@@ -3,7 +3,7 @@
 require_relative("urpc_test_helper")
 
 class UrpcSubmitFrameTest < Minitest::Test
-  include Urpc::SubmitFrame
+  include(Urpc::SubmitFrame)
 
   def write_raw(bytes)
     File.open(Urpc.in_fifo, File::WRONLY | File::NONBLOCK) do |io|
@@ -274,7 +274,7 @@ class UrpcSubmitFrameTest < Minitest::Test
         probe_call.body_payload.bytesize
 
       payload_size = probe_payload.bytesize + (target - probe_frame_size)
-      raise("payload out of str16 range") if payload_size < 256 || payload_size > 65535
+      raise("payload out of str16 range") if payload_size < 256 || payload_size > 65_535
       payload = "x" * payload_size
 
       captured = []

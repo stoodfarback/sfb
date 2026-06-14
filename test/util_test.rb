@@ -19,7 +19,7 @@ class UtilTest < Minitest::Test
   end
 
   def test_activerecord_pg_advisory_xact_lock
-    # TODO:
+    # TODO: cover PostgreSQL advisory transaction lock behavior.
   end
 
   def test_random

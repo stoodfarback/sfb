@@ -331,7 +331,7 @@ class UrpcBidirectionalTest < Minitest::Test
     with_broker do
       bidirectional_class = Class.new(Urpc::BidirectionalHandler) do
         def run!
-          data([:bidir, :ready])
+          data(%i[bidir ready])
           answer = receive
           finish([:bidir, answer])
         end
@@ -340,9 +340,9 @@ class UrpcBidirectionalTest < Minitest::Test
       bidirectional = bidirectional_handler(bidirectional_class)
       normal = Class.new do
         def call(req)
-          req.stream.data([:normal, :a])
-          req.stream.data([:normal, :b])
-          req.stream.return([:normal, :done])
+          req.stream.data(%i[normal a])
+          req.stream.data(%i[normal b])
+          req.stream.return(%i[normal done])
         end
       end.new
 
@@ -367,13 +367,13 @@ class UrpcBidirectionalTest < Minitest::Test
       normal_events = events.select { it[0] == :normal }
 
       assert_equal([
-        [:bidir, :data, [:bidir, :ready]],
+        [:bidir, :data, %i[bidir ready]],
         [:bidir, :return, [:bidir, "ok"]],
       ], bidirectional_events)
       assert_equal([
-        [:normal, :data, [:normal, :a]],
-        [:normal, :data, [:normal, :b]],
-        [:normal, :return, [:normal, :done]],
+        [:normal, :data, %i[normal a]],
+        [:normal, :data, %i[normal b]],
+        [:normal, :return, %i[normal done]],
       ], normal_events)
     end
   end

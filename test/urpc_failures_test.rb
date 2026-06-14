@@ -116,7 +116,7 @@ class UrpcFailuresTest < Minitest::Test
     results = Queue.new
     first = Thread.new do
       stream.return("first")
-      results << [:first, :ok]
+      results << %i[first ok]
     rescue => e
       results << [:first, e]
     end
@@ -125,7 +125,7 @@ class UrpcFailuresTest < Minitest::Test
 
     second = Thread.new do
       stream.return("second")
-      results << [:second, :ok]
+      results << %i[second ok]
     rescue => e
       results << [:second, e]
     end
@@ -413,9 +413,9 @@ class UrpcFailuresTest < Minitest::Test
       assert_equal(0, @broker.backend_count("wait_cast_key"))
       assert_nil(client.cast(:record, "later"))
 
-      raise("cast was not queued") if !poll_until {
+      raise("cast was not queued") if !poll_until do
         @broker.state_lock.synchronize { (@broker.queues_by_key["wait_cast_key"]&.size || 0) == 1 }
-      }
+      end
       assert(received.empty?)
 
       start_server("wait_cast_key", handler)
@@ -447,9 +447,9 @@ class UrpcFailuresTest < Minitest::Test
         Urpc::Client.new("wait_numeric_later", timeout: 2, wait_for_server: 2).call(:echo, "ok")
       end
 
-      raise("call was not queued") if !poll_until {
+      raise("call was not queued") if !poll_until do
         @broker.state_lock.synchronize { (@broker.queues_by_key["wait_numeric_later"]&.size || 0) == 1 }
-      }
+      end
 
       sleep(0.2)
       start_server("wait_numeric_later", handler)
@@ -552,18 +552,18 @@ class UrpcFailuresTest < Minitest::Test
         Urpc::Client.new("wait_busy_backend", timeout: 5).call(:slow, "first")
       end
 
-      raise("busy call did not start") if !poll_until {
+      raise("busy call did not start") if !poll_until do
         @broker.state_lock.synchronize { @broker.in_flight_by_key["wait_busy_backend"] == 1 }
-      }
+      end
 
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       second_thread = Thread.new do
         Urpc::Client.new("wait_busy_backend", timeout: 3, wait_for_server: 0.2).call(:echo, "second")
       end
 
-      raise("second call was not queued") if !poll_until {
+      raise("second call was not queued") if !poll_until do
         @broker.state_lock.synchronize { (@broker.queues_by_key["wait_busy_backend"]&.size || 0) == 1 }
-      }
+      end
 
       assert_equal(0, @broker.state_lock.synchronize { @broker.wait_calls_by_id.size })
 
@@ -597,9 +597,9 @@ class UrpcFailuresTest < Minitest::Test
         Urpc::Client.new("wait_disappears", timeout: 5).call(:slow, "busy") rescue nil
       end
 
-      raise("busy call did not start") if !poll_until {
+      raise("busy call did not start") if !poll_until do
         @broker.state_lock.synchronize { @broker.in_flight_by_key["wait_disappears"] == 1 }
-      }
+      end
 
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       victim_thread = Thread.new do
@@ -608,9 +608,9 @@ class UrpcFailuresTest < Minitest::Test
         e
       end
 
-      raise("victim was not queued") if !poll_until {
+      raise("victim was not queued") if !poll_until do
         @broker.state_lock.synchronize { (@broker.queues_by_key["wait_disappears"]&.size || 0) == 1 }
-      }
+      end
 
       @broker.state_lock.synchronize do
         (@broker.backends_by_key["wait_disappears"] || []).each { it.sock.close rescue nil }
@@ -665,9 +665,9 @@ class UrpcFailuresTest < Minitest::Test
       first_thread = Thread.new do
         Urpc::Client.new("wait_recompute_first", timeout: 2, wait_for_server: 0.5).call(:echo, "first")
       end
-      raise("first call was not queued") if !poll_until {
+      raise("first call was not queued") if !poll_until do
         @broker.state_lock.synchronize { (@broker.queues_by_key["wait_recompute_first"]&.size || 0) == 1 }
-      }
+      end
 
       second_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       second_thread = Thread.new do
@@ -675,9 +675,9 @@ class UrpcFailuresTest < Minitest::Test
       rescue => e
         e
       end
-      raise("second call was not queued") if !poll_until {
+      raise("second call was not queued") if !poll_until do
         @broker.state_lock.synchronize { (@broker.queues_by_key["wait_recompute_second"]&.size || 0) == 1 }
-      }
+      end
 
       start_server("wait_recompute_first", handler)
       wait_for_backend("wait_recompute_first")
@@ -703,9 +703,9 @@ class UrpcFailuresTest < Minitest::Test
         e
       end
 
-      raise("call was not queued") if !poll_until {
+      raise("call was not queued") if !poll_until do
         @broker.state_lock.synchronize { (@broker.queues_by_key["wait_stop"]&.size || 0) == 1 }
-      }
+      end
 
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       @broker.stop
@@ -969,7 +969,7 @@ class UrpcFailuresTest < Minitest::Test
   def test_dead_socket_requeues_to_live_backend
     with_broker do
       handler = Object.new
-      handler.singleton_class.define_method(:ping) { |x| sleep(1); x }
+      handler.singleton_class.define_method(:ping) {|x| sleep(1); x }
 
       start_server("requeue_key", handler)
       wait_for_backend("requeue_key")
@@ -994,7 +994,7 @@ class UrpcFailuresTest < Minitest::Test
   def test_dead_socket_requeues_and_waits_for_new_backend
     with_broker do
       handler = Object.new
-      handler.singleton_class.define_method(:ping) { |x| x }
+      handler.singleton_class.define_method(:ping) {|x| x }
 
       start_server("requeue_wait_key", handler)
       wait_for_backend("requeue_wait_key")
@@ -1021,7 +1021,7 @@ class UrpcFailuresTest < Minitest::Test
   def test_dead_socket_requeue_without_wait_for_server_fails_fast
     with_broker do
       handler = Object.new
-      handler.singleton_class.define_method(:ping) { |x| x }
+      handler.singleton_class.define_method(:ping) {|x| x }
 
       start_server("requeue_no_wait_key", handler)
       wait_for_backend("requeue_no_wait_key")

@@ -86,7 +86,7 @@ module Sfb::Test::OutputCapture
 
     begin
       super
-    rescue Exception
+    rescue Minitest::Assertion, StandardError
       after_teardown_failed = true
       raise
     ensure
@@ -130,7 +130,7 @@ module Sfb::Test::OutputCapture
     $stdout.sync = true
     $stderr.sync = true
     nil
-  rescue Exception
+  rescue
     sfb_output_capture_restore_original_streams
     sfb_output_capture_close_writer
     sfb_output_capture_join_reader

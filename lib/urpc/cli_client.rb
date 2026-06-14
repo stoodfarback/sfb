@@ -37,7 +37,7 @@ module Urpc
         self.stream = client.bidirectional_stream(command.to_sym, request)
         run_stream_loop
         result = stream.result
-        return cli_status(result)
+        cli_status(result)
       ensure
         stream&.close
         Signal.trap("INT", previous_int_handler) if previous_int_handler
@@ -99,8 +99,7 @@ module Urpc
           next
         end
 
-        ready = IO.select([stream.reply_io], nil, nil, select_timeout)
-        if ready
+        if stream.reply_io.wait_readable(select_timeout)
           stream.fill_buffer_once
         else
           check_force_quit_deadline

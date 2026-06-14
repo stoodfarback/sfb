@@ -101,7 +101,7 @@ module Urpc
           return
         end
 
-        if !IO.select(nil, [io], nil, remaining)
+        if !io.wait_writable(remaining)
           warn_terminal_reply_drain_timeout(offset, bytes.bytesize)
           return
         end

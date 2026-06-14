@@ -25,7 +25,7 @@ module Urpc
     WAIT_TIMEOUT_MS = 2
     WAIT_TIMEOUT_BYTES = 4
 
-    UINT32_MAX = (2**32) - 1
+    UINT32_MAX = (2 ** 32) - 1
 
     def self.encode_wait(wait_for_server)
       if wait_for_server == true
@@ -68,6 +68,5 @@ module Urpc
     rescue EncodingError => e
       raise(ArgumentError, "#{label} invalid UTF-8: #{e.message}")
     end
-
   end
 end

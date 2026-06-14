@@ -155,7 +155,7 @@ module Urpc
     end
 
     def array_of_strings?(value)
-      value.is_a?(Array) && value.all? { it.is_a?(String) }
+      value.is_a?(Array) && value.all?(String)
     end
 
     def non_empty_string?(value)

@@ -17,7 +17,7 @@ class TestRunnerTest < Minitest::Test
     cleaned = output.
       gsub(/--seed \d+/, "--seed <SEED>").
       gsub(/Finished in \d+\.\d+s/, "Finished in <TIME>s").
-      gsub(/[\d.]+ runs\/s, [\d.]+ assertions\/s/, "<RATE> runs/s, <RATE> assertions/s").
+      gsub(%r{[\d.]+ runs/s, [\d.]+ assertions/s}, "<RATE> runs/s, <RATE> assertions/s").
       gsub(/= \d+\.\d+ s =/, "= <TIME> s =")
     assert_snapshot(cleaned)
   end

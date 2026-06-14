@@ -168,7 +168,7 @@ module Urpc
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + inbox_open_timeout
       loop do
         begin
-          io = File.open(path, File::WRONLY | File::NONBLOCK)
+          io = IO.open(IO.sysopen(path, File::WRONLY | File::NONBLOCK))
           if !io.stat.pipe?
             io.close rescue nil
             raise(ArgumentError, "inbox path is not a FIFO: #{path}")
