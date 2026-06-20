@@ -56,6 +56,14 @@ class UrpcCliServerTest < Minitest::Test
     end
   end
 
+  class PathInfoCommand < Urpc::CliCommand
+    def perform!
+      payload = argv.to_h { [it, path_info(it)] }
+      stdout(JSON.generate(payload))
+      0
+    end
+  end
+
   class TtyCommand < Urpc::CliCommand
     def perform!
       payload = {
@@ -119,6 +127,10 @@ class UrpcCliServerTest < Minitest::Test
 
     def workspace_cmd(req)
       req.handle_bidirectional!(WorkspaceCommand, command_name: __method__)
+    end
+
+    def path_info_cmd(req)
+      req.handle_bidirectional!(PathInfoCommand, command_name: __method__)
     end
 
     def tty_cmd(req)
@@ -227,6 +239,42 @@ class UrpcCliServerTest < Minitest::Test
         assert_equal("env-value", data["env_value"])
         assert_equal("stdin-data", data["stdin"])
         assert_equal("", data["stdin_again"])
+      end
+    end
+  end
+
+  def test_path_info_reports_caller_side_path_metadata
+    with_broker do
+      key = start_cli_server
+
+      Dir.mktmpdir("urpc-cli-path-info-") do |workspace|
+        File.write(File.join(workspace, "regular.txt"), "data")
+        Dir.mkdir(File.join(workspace, "subdir"))
+        File.symlink("regular.txt", File.join(workspace, "link_to_file"))
+        File.symlink("subdir", File.join(workspace, "link_to_dir"))
+        File.symlink("nope", File.join(workspace, "broken_link"))
+
+        stdout, stderr, status = call_cli(
+          key,
+          "path_info_cmd",
+          "missing",
+          "regular.txt",
+          "subdir",
+          "link_to_file",
+          "link_to_dir",
+          "broken_link",
+          chdir: workspace,
+        )
+
+        assert(status.success?, stderr)
+        data = JSON.parse(stdout)
+
+        assert_equal({ "exists" => false, "file" => false, "directory" => false, "symlink" => false }, data["missing"])
+        assert_equal({ "exists" => true, "file" => true, "directory" => false, "symlink" => false }, data["regular.txt"])
+        assert_equal({ "exists" => true, "file" => false, "directory" => true, "symlink" => false }, data["subdir"])
+        assert_equal({ "exists" => true, "file" => true, "directory" => false, "symlink" => true }, data["link_to_file"])
+        assert_equal({ "exists" => true, "file" => false, "directory" => true, "symlink" => true }, data["link_to_dir"])
+        assert_equal({ "exists" => false, "file" => false, "directory" => false, "symlink" => true }, data["broken_link"])
       end
     end
   end

@@ -86,6 +86,10 @@ module Urpc
       client_op(op: :list_dir, path: path)
     end
 
+    def path_info(path)
+      client_op(op: :path_info, path: path)
+    end
+
     def read_env(name)
       client_op(op: :read_env, name: name)
     end

@@ -158,6 +158,8 @@ module Urpc
         File.binread(resolve_path(fetch_string(event, :path)))
       when :list_dir
         op_list_dir(event)
+      when :path_info
+        op_path_info(event)
       when :read_env
         ENV[fetch_string(event, :name)]
       when :list_env
@@ -195,6 +197,16 @@ module Urpc
           type: file_type(entry_path),
         }
       end
+    end
+
+    def op_path_info(event)
+      path = resolve_path(fetch_string(event, :path))
+      {
+        exists: File.exist?(path),
+        file: File.file?(path),
+        directory: File.directory?(path),
+        symlink: File.symlink?(path),
+      }
     end
 
     def op_list_env(event)

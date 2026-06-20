@@ -54,6 +54,7 @@ V1 includes:
 | Caller-side `glob` | Included |
 | Caller-side `read_file` | Included |
 | Caller-side `list_dir` | Included |
+| Caller-side `path_info` | Included |
 | Caller-side `read_env` | Included |
 | Caller-side `list_env` | Included |
 | Caller-side `read_stdin` | Included |
@@ -267,6 +268,7 @@ Suggested helpers:
 | `glob(pattern)` | Ask client to expand a glob against client filesystem. |
 | `read_file(path)` | Ask client to read a file. |
 | `list_dir(path)` | Ask client to list a directory. |
+| `path_info(path)` | Ask client for existence/type metadata about a path. |
 | `read_env(name)` | Ask client for one environment variable. |
 | `list_env(include_values: false)` | Ask client for environment names or values. |
 | `read_stdin` | Ask client to read remaining stdin. |
@@ -511,6 +513,34 @@ Known entry types:
 | `:symlink` | Symbolic link. |
 | `:other` | Anything else. |
 
+### `:path_info`
+
+Request:
+
+```ruby
+{
+  type: :op,
+  op: :path_info,
+  path: "inbox_review/001.yml",
+}
+```
+
+Result value:
+
+```ruby
+{ exists: true, file: true, directory: false, symlink: false }
+```
+
+| Field | Meaning |
+|---|---|
+| `exists` | `File.exist?` — follows symlinks. |
+| `file` | `File.file?` — follows symlinks. |
+| `directory` | `File.directory?` — follows symlinks. |
+| `symlink` | `File.symlink?` — describes the path itself, does not follow. |
+
+A missing path returns all fields false, never an error.
+Because `exists` follows symlinks while `symlink` does not, a broken symlink reports `exists: false, symlink: true`; detect it with `symlink && !exists`.
+
 ### `:read_env`
 
 Request:
@@ -603,7 +633,7 @@ Result value is true if the corresponding caller-side stdio stream is a TTY. It 
 | Server-owned help/status `0` | Yes |
 | Validation/status `2` | Yes |
 | stdout/stderr/status forwarding | Yes |
-| Caller-side `glob`, `read_file`, `list_dir`, `read_env`, `list_env`, `read_stdin` | Yes |
+| Caller-side `glob`, `read_file`, `list_dir`, `path_info`, `read_env`, `list_env`, `read_stdin` | Yes |
 | Caller-side stdio TTY checks | Yes |
 | Raw argv forwarding after command name | Yes |
 | Request shape validation | Yes |
