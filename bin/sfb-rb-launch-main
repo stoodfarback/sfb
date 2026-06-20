@@ -1,0 +1,28 @@
+#!/usr/bin/env zsh
+
+if [[ $# -lt 1 ]]; then
+  print -u2 "usage: sfb-rb-launch-main APP_DIR [ARGS...]"
+  exit 64
+fi
+
+app_dir=$1
+shift
+
+# Preserve the user's starting directory for commands that resolve caller-relative paths.
+export CALLER_CWD="$PWD"
+
+# Caller projects can leave Bundler/Ruby process-wide state behind.
+unset -m "BUNDLE_*" "BUNDLER_*"
+unset RUBYOPT RUBYLIB
+
+# If the app declares a Ruby version, load RVM before cd so its directory hooks fire.
+# Otherwise use RVM's generated default environment without loading the full shell integration.
+if [[ -f "$app_dir/.rvmrc" || -f "$app_dir/.ruby-version" ]]; then
+  [[ -r "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm"
+elif [[ -r "$HOME/.rvm/environments/default" ]]; then
+  source "$HOME/.rvm/environments/default"
+fi
+
+cd "$app_dir"
+
+exec ruby --jit main.rb "$@"
