@@ -50,7 +50,7 @@ module Urpc
     def set_defaults!; end
 
     def help_requested?
-      argv.any? { it == "-h" || it == "--help" }
+      argv.include?("-h") || argv.include?("--help")
     end
 
     def parse_argv!; end

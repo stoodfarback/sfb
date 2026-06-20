@@ -70,16 +70,18 @@ class UtilTest < Minitest::Test
   end
 
   def test_str_indent
-    assert_equal(<<~OUTPUT, "start:\n" + Sfb::Util.str_indent(<<~INPUT))
+    input = <<~INPUT
+      a
+        b
+      c
+    INPUT
+
+    assert_equal(<<~OUTPUT, "start:\n#{Sfb::Util.str_indent(input)}")
       start:
         a
           b
         c
     OUTPUT
-      a
-        b
-      c
-    INPUT
   end
 
   def test_noko

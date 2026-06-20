@@ -23,7 +23,7 @@ Dir.children(projects_dir).sort.each do |name|
     system("bundle update --conservative sfb")
 
     status = %x(git status --porcelain).strip
-    only_lockfile_changed = (status == "M Gemfile.lock" || status == " M Gemfile.lock")
+    only_lockfile_changed = status == "M Gemfile.lock"
 
     if only_lockfile_changed
       system("git add Gemfile.lock")

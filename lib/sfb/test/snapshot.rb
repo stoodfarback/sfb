@@ -129,7 +129,6 @@ module Sfb::Test::Snapshot
 
     file_paths = dir.glob("**/*", File::FNM_DOTMATCH).
       select(&:file?).
-      reject { it.basename.to_s == "." || it.basename.to_s == ".." }.
       sort_by { it.relative_path_from(dir).to_s }
 
     file_paths.each do |path|

@@ -12,10 +12,8 @@ class Sfb::Store
     @cache = {}
   end
 
-  def transaction(read_only: false)
-    @store.transaction(read_only) do
-      yield
-    end
+  def transaction(read_only: false, &)
+    @store.transaction(read_only, &)
   end
 
   def [](k)

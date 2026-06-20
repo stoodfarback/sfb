@@ -108,7 +108,8 @@ module Urpc
 
         chunk = bytes.byteslice(offset, TERMINAL_REPLY_DRAIN_CHUNK_BYTES)
         written = io.write_nonblock(chunk, exception: false)
-        next if written == :wait_writable || written == 0
+        next if written == :wait_writable
+        next if written == 0
         offset += written
       end
     end
