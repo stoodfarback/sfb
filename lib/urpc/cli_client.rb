@@ -154,8 +154,10 @@ module Urpc
       case event[:op]
       when :glob
         op_glob(event)
-      when :read_file
-        File.binread(resolve_path(fetch_string(event, :path)))
+      when :read_file_binary
+        op_read_file_binary(event)
+      when :read_file_utf8
+        op_read_file_utf8(event)
       when :list_dir
         op_list_dir(event)
       when :path_info
@@ -184,6 +186,21 @@ module Urpc
       else
         Dir.glob(pattern, base: cwd)
       end
+    end
+
+    def op_read_file_binary(event)
+      File.binread(resolve_path(fetch_string(event, :path)))
+    end
+
+    def op_read_file_utf8(event)
+      path = resolve_path(fetch_string(event, :path))
+      # `r:BOM|UTF-8` strips a leading BOM but does not validate the bytes, and
+      # MessagePack packs an invalid-UTF-8 string as a `str` without complaint. Without
+      # this check the bad bytes reach the server tagged UTF-8-but-invalid and blow up
+      # far downstream, so validate here to fail fast at the boundary with the path.
+      content = File.read(path, mode: "r:BOM|UTF-8")
+      raise("not valid UTF-8: #{path}") if !content.valid_encoding?
+      content
     end
 
     def op_list_dir(event)

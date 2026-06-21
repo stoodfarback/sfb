@@ -78,8 +78,12 @@ module Urpc
       client_op(op: :glob, pattern: pattern)
     end
 
-    def read_file(path)
-      client_op(op: :read_file, path: path)
+    def read_file_binary(path)
+      client_op(op: :read_file_binary, path: path)
+    end
+
+    def read_file_utf8(path)
+      client_op(op: :read_file_utf8, path: path)
     end
 
     def list_dir(path)

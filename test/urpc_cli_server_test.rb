@@ -43,7 +43,7 @@ class UrpcCliServerTest < Minitest::Test
         argv: argv,
         cwd: cwd,
         paths: glob("*.txt").sort,
-        file: read_file("alpha.txt"),
+        file: read_file_utf8("alpha.txt"),
         dir: list_dir("."),
         env_one: read_env("URPC_CLI_TEST_ENV"),
         env_names_has_key: list_env.include?("URPC_CLI_TEST_ENV"),
@@ -52,6 +52,29 @@ class UrpcCliServerTest < Minitest::Test
         stdin_again: read_stdin,
       }
       stdout(JSON.generate(payload))
+      0
+    end
+  end
+
+  class EncodingCommand < Urpc::CliCommand
+    def perform!
+      binary = read_file_binary("bin.dat")
+      utf8 = read_file_utf8("text.txt")
+      payload = {
+        bin_encoding: binary.encoding.name,
+        bin_hex: binary.unpack1("H*"),
+        utf8_encoding: utf8.encoding.name,
+        utf8_valid: utf8.valid_encoding?,
+        utf8: utf8,
+      }
+      stdout(JSON.generate(payload))
+      0
+    end
+  end
+
+  class ReadUtf8Command < Urpc::CliCommand
+    def perform!
+      stdout(read_file_utf8(argv.first))
       0
     end
   end
@@ -127,6 +150,14 @@ class UrpcCliServerTest < Minitest::Test
 
     def workspace_cmd(req)
       req.handle_bidirectional!(WorkspaceCommand, command_name: __method__)
+    end
+
+    def encoding_cmd(req)
+      req.handle_bidirectional!(EncodingCommand, command_name: __method__)
+    end
+
+    def read_utf8_cmd(req)
+      req.handle_bidirectional!(ReadUtf8Command, command_name: __method__)
     end
 
     def path_info_cmd(req)
@@ -239,6 +270,96 @@ class UrpcCliServerTest < Minitest::Test
         assert_equal("env-value", data["env_value"])
         assert_equal("stdin-data", data["stdin"])
         assert_equal("", data["stdin_again"])
+      end
+    end
+  end
+
+  def test_read_file_binary_returns_raw_bytes
+    Dir.mktmpdir("urpc-cli-binread-") do |dir|
+      bytes = "caf\xC3\xA9".b
+      path = File.join(dir, "f.bin")
+      File.binwrite(path, bytes)
+
+      value = Urpc::CliClient.new([]).operation_value(op: :read_file_binary, path: path)
+
+      assert_equal(Encoding::ASCII_8BIT, value.encoding)
+      assert_equal(bytes, value)
+    end
+  end
+
+  def test_read_file_utf8_returns_validated_utf8
+    Dir.mktmpdir("urpc-cli-utf8-") do |dir|
+      path = File.join(dir, "f.txt")
+      File.write(path, "café 🚀")
+
+      value = Urpc::CliClient.new([]).operation_value(op: :read_file_utf8, path: path)
+
+      assert_equal(Encoding::UTF_8, value.encoding)
+      assert(value.valid_encoding?)
+      assert_equal("café 🚀", value)
+    end
+  end
+
+  def test_read_file_utf8_strips_leading_bom_while_binary_keeps_it
+    Dir.mktmpdir("urpc-cli-bom-") do |dir|
+      path = File.join(dir, "bom.txt")
+      File.binwrite(path, "\xEF\xBB\xBFkey: value")
+      client = Urpc::CliClient.new([])
+
+      assert_equal("key: value", client.operation_value(op: :read_file_utf8, path: path))
+      assert_equal("\xEF\xBB\xBFkey: value".b, client.operation_value(op: :read_file_binary, path: path))
+    end
+  end
+
+  def test_read_file_utf8_rejects_invalid_utf8_with_path
+    Dir.mktmpdir("urpc-cli-invalid-") do |dir|
+      path = File.join(dir, "bad.txt")
+      File.binwrite(path, "bad\xFF\xFEbytes")
+
+      e = assert_raises(RuntimeError) do
+        Urpc::CliClient.new([]).operation_value(op: :read_file_utf8, path: path)
+      end
+
+      assert_match(/not valid UTF-8/, e.message)
+      assert_includes(e.message, path)
+    end
+  end
+
+  def test_read_file_ops_preserve_encoding_across_the_wire
+    with_broker do
+      key = start_cli_server
+
+      Dir.mktmpdir("urpc-cli-encoding-") do |workspace|
+        bin_bytes = "\x00\x89\xC3\xA9\xFF".b
+        File.binwrite(File.join(workspace, "bin.dat"), bin_bytes)
+        File.write(File.join(workspace, "text.txt"), "café 🚀 naïve")
+
+        stdout, stderr, status = call_cli(key, "encoding_cmd", chdir: workspace)
+
+        assert(status.success?, stderr)
+        data = JSON.parse(stdout)
+        assert_equal("ASCII-8BIT", data["bin_encoding"])
+        assert_equal(bin_bytes.unpack1("H*"), data["bin_hex"])
+        assert_equal("UTF-8", data["utf8_encoding"])
+        assert_equal(true, data["utf8_valid"])
+        assert_equal("café 🚀 naïve", data["utf8"])
+      end
+    end
+  end
+
+  def test_read_file_utf8_invalid_surfaces_clear_remote_error
+    with_broker do
+      key = start_cli_server
+
+      Dir.mktmpdir("urpc-cli-invalid-utf8-") do |workspace|
+        File.binwrite(File.join(workspace, "bad.txt"), "bad\xFF\xFEbytes")
+
+        stdout, stderr, status = call_cli(key, "read_utf8_cmd", "bad.txt", chdir: workspace)
+
+        refute(status.success?)
+        assert_equal("", stdout)
+        assert_match(/not valid UTF-8/, stderr)
+        assert_match(%r{/bad\.txt}, stderr)
       end
     end
   end

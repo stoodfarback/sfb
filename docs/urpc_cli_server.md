@@ -52,7 +52,8 @@ V1 includes:
 | Ctrl-C cancellation | Included |
 | Implicit client-death cancellation | Included |
 | Caller-side `glob` | Included |
-| Caller-side `read_file` | Included |
+| Caller-side `read_file_binary` | Included |
+| Caller-side `read_file_utf8` | Included |
 | Caller-side `list_dir` | Included |
 | Caller-side `path_info` | Included |
 | Caller-side `read_env` | Included |
@@ -186,7 +187,7 @@ class VerifyCommand < Urpc::CliCommand
 
   def perform!
     files = glob("inbox_review/*.yml").sort.to_h do |path|
-      [File.basename(path), read_file(path)]
+      [File.basename(path), read_file_utf8(path)]
     end
 
     verifier.verify(files:)
@@ -266,7 +267,8 @@ Suggested helpers:
 | `stdout(data)` | Stream bytes to client stdout. |
 | `stderr(data)` | Stream bytes to client stderr. |
 | `glob(pattern)` | Ask client to expand a glob against client filesystem. |
-| `read_file(path)` | Ask client to read a file. |
+| `read_file_binary(path)` | Ask client to read a file as raw bytes (ASCII-8BIT). |
+| `read_file_utf8(path)` | Ask client to read a file as validated UTF-8 text. |
 | `list_dir(path)` | Ask client to list a directory. |
 | `path_info(path)` | Ask client for existence/type metadata about a path. |
 | `read_env(name)` | Ask client for one environment variable. |
@@ -324,7 +326,7 @@ The client writes the event's `:data` value to its stderr without adding formatt
 ```ruby
 {
   type: :op,
-  op: :read_file,
+  op: :read_file_utf8,
   path: "inbox_review/001.yml",
 }
 ```
@@ -469,19 +471,41 @@ Result value:
 
 Relative patterns return relative paths. Absolute patterns return absolute paths.
 
-### `:read_file`
+### `:read_file_binary`
 
 Request:
 
 ```ruby
 {
   type: :op,
-  op: :read_file,
+  op: :read_file_binary,
   path: "inbox_review/001.yml",
 }
 ```
 
-Result value is the file content as a String. Binary content is allowed; clients should preserve bytes.
+Result value is the exact file bytes as an ASCII-8BIT String, packed on the wire as MessagePack `bin`.
+This is the byte-faithful primitive: clients read with `File.binread` and preserve every byte, including any leading BOM.
+
+### `:read_file_utf8`
+
+Request:
+
+```ruby
+{
+  type: :op,
+  op: :read_file_utf8,
+  path: "inbox_review/001.yml",
+}
+```
+
+Result value is the file content as a validated UTF-8 String, packed on the wire as MessagePack `str`.
+The client reads with `mode: "r:BOM|UTF-8"`, which strips a single leading UTF-8 BOM, then validates and raises a clear per-path error (e.g. `not valid UTF-8: <path>`) when `!content.valid_encoding?`.
+
+The validation is mandatory and must run on the client before the value is returned.
+`r:BOM|UTF-8` does not itself validate the bytes, and MessagePack packs an invalid-UTF-8 `str` without complaint, so an unvalidated string would reach the server tagged UTF-8-but-invalid and fail far downstream instead of at the boundary.
+
+Note the BOM asymmetry: `read_file_binary` preserves a leading BOM while `read_file_utf8` strips it, so the two ops return content that differs by those bytes for BOM-prefixed files.
+Use `read_file_binary` when you need byte-exact content.
 
 ### `:list_dir`
 
@@ -633,7 +657,8 @@ Result value is true if the corresponding caller-side stdio stream is a TTY. It 
 | Server-owned help/status `0` | Yes |
 | Validation/status `2` | Yes |
 | stdout/stderr/status forwarding | Yes |
-| Caller-side `glob`, `read_file`, `list_dir`, `path_info`, `read_env`, `list_env`, `read_stdin` | Yes |
+| Caller-side `glob`, `read_file_binary`, `read_file_utf8`, `list_dir`, `path_info`, `read_env`, `list_env`, `read_stdin` | Yes |
+| `read_file_utf8` BOM stripping and invalid-UTF-8 boundary error | Yes |
 | Caller-side stdio TTY checks | Yes |
 | Raw argv forwarding after command name | Yes |
 | Request shape validation | Yes |
@@ -664,7 +689,7 @@ class VerifyCommand < Urpc::CliCommand
   def perform!
     paths = glob("inbox_review/*.yml").sort
     files = paths.to_h do |path|
-      [File.basename(path), read_file(path)]
+      [File.basename(path), read_file_utf8(path)]
     end
 
     verifier.verify(files:)
@@ -720,18 +745,24 @@ end
 
 ## Deferred: Caller-Side Writes
 
-`write_file` is a natural future operation:
+Writes are a natural future operation.
+When added, they mirror the read split rather than a single ambiguous `write_file`:
+
+| Op | Behavior |
+|---|---|
+| `write_file_binary` | Write the given bytes as-is. |
+| `write_file_utf8` | Require the given String be valid UTF-8 (raise otherwise) and write it as UTF-8. |
 
 ```ruby
 {
   type: :op,
-  op: :write_file,
+  op: :write_file_binary,
   path: "out.txt",
   data: "contents",
 }
 ```
 
-It is intentionally deferred because write behavior needs more UX choices:
+Writes are intentionally deferred because their behavior needs more UX choices:
 
 | Question | Examples |
 |---|---|
@@ -739,7 +770,7 @@ It is intentionally deferred because write behavior needs more UX choices:
 | Parent directories | Require existing parent, create parents. |
 | Atomicity | Direct write, temp file and rename. |
 | Permissions | Preserve mode, explicit mode, default mode. |
-| Binary data | Same String byte preservation as `read_file`. |
+| Binary vs text | `write_file_binary` preserves bytes; `write_file_utf8` validates UTF-8, like the read split. |
 
 The architecture supports it, but V1 does not need it.
 
