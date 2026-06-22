@@ -11,6 +11,7 @@ module Sfb
   autoload(:Memo, "sfb/memo")
   autoload(:KV, "sfb/kv")
   autoload(:RateLimit, "sfb/rate_limit")
+  autoload(:UrpcKv, "sfb/urpc_kv")
   autoload(:LexConstShadow, "sfb/lex_const_shadow")
   autoload(:Test, "sfb/test")
   autoload(:TestRunner, "sfb/test_runner")
