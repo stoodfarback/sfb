@@ -143,7 +143,9 @@ module Sfb::Test::Snapshot
 
   def snapshot_cache(name = nil)
     key = snapshot_derive_name
-    key = "#{key}/#{name}" if !name.nil?
+    if !name.nil?
+      key = "#{key}/#{name}"
+    end
     fixture_path = File.join(Sfb::Test::Snapshot.fixtures_dir!, "#{key}.json")
 
     if File.exist?(fixture_path)
@@ -182,12 +184,16 @@ module Sfb::Test::Snapshot
       branch = is_last ? "└─ " : "├─ "
       child_prefix = prefix + (is_last ? "   " : "│  ")
       label = entry.basename.to_s
-      label = "#{label}/" if entry.directory?
+      if entry.directory?
+        label = "#{label}/"
+      end
       lines << "#{prefix}#{branch}#{label}"
 
       if entry.directory?
         child_entries = entry.children.sort_by { it.basename.to_s }
-        lines.concat(snapshot_render_tree_entries(child_entries, prefix: child_prefix)) if child_entries.any?
+        if child_entries.any?
+          lines.concat(snapshot_render_tree_entries(child_entries, prefix: child_prefix))
+        end
       end
     end
 

@@ -91,7 +91,9 @@ class UrpcFailuresTest < Minitest::Test
           cv.wait(mutex) while locked
         else
           locked = true
-          first_entered << true if entry_number == 1
+          if entry_number == 1
+            first_entered << true
+          end
         end
         locked = true
       end
@@ -348,7 +350,9 @@ class UrpcFailuresTest < Minitest::Test
         e = assert_raises(Urpc::BrokerUnavailable) { client.call(:echo, "hi") }
         assert_match(/root/i, e.message)
       ensure
-        FileUtils.mv(moved_root, Urpc.root) if File.directory?(moved_root)
+        if File.directory?(moved_root)
+          FileUtils.mv(moved_root, Urpc.root)
+        end
       end
     end
   end

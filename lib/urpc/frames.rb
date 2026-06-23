@@ -18,12 +18,16 @@ module Urpc
     end
 
     def self.pack_error(exception)
-      exception = StandardError.new(exception) if exception.is_a?(String)
+      if exception.is_a?(String)
+        exception = StandardError.new(exception)
+      end
       MessagePack.pack(error_frame(exception))
     end
 
     def self.error_frame(exception)
-      exception = StandardError.new(exception) if exception.is_a?(String)
+      if exception.is_a?(String)
+        exception = StandardError.new(exception)
+      end
       frame(:error, error_payload(exception))
     end
 

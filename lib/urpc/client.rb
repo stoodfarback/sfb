@@ -121,9 +121,15 @@ module Urpc
 
     def build_envelope(call, inline:)
       flags = 0
-      flags |= SubmitFrame::SUBMIT_FLAG_INLINE if inline
-      flags |= SubmitFrame::SUBMIT_FLAG_CAST if call.cast?
-      flags |= SubmitFrame::SUBMIT_FLAG_BIDIRECTIONAL if call.bidirectional?
+      if inline
+        flags |= SubmitFrame::SUBMIT_FLAG_INLINE
+      end
+      if call.cast?
+        flags |= SubmitFrame::SUBMIT_FLAG_CAST
+      end
+      if call.bidirectional?
+        flags |= SubmitFrame::SUBMIT_FLAG_BIDIRECTIONAL
+      end
       SubmitFrame.encode_envelope(
         id_bin: [call.id].pack("H*"),
         flags: flags,

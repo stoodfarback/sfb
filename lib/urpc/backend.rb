@@ -70,7 +70,9 @@ module Urpc
         end
       rescue IOError, Errno::EPIPE, Errno::ECONNRESET, MessagePack::UnpackError => e
         if dispatched
-          synthesize_backend_died(call, e) if call.reply_open?
+          if call.reply_open?
+            synthesize_backend_died(call, e)
+          end
         else
           broker.backend_dispatch_failed(self, call)
           call_reclaimed = true

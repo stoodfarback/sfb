@@ -27,7 +27,9 @@ module Urpc
 
     def run
       parse!
-      Urpc.set_root(root) if root
+      if root
+        Urpc.set_root(root)
+      end
       self.cwd = Dir.pwd
 
       previous_int_handler = Signal.trap("INT") { record_interrupt }
@@ -40,7 +42,9 @@ module Urpc
         cli_status(result)
       ensure
         stream&.close
-        Signal.trap("INT", previous_int_handler) if previous_int_handler
+        if previous_int_handler
+          Signal.trap("INT", previous_int_handler)
+        end
       end
     end
 
@@ -115,7 +119,9 @@ module Urpc
     end
 
     def process_cli_event(event)
-      protocol_error("malformed cli event") if !event.is_a?(Hash)
+      if !event.is_a?(Hash)
+        protocol_error("malformed cli event")
+      end
 
       case event[:type]
       when :stdout
@@ -130,7 +136,9 @@ module Urpc
     end
 
     def write_stream(io, data, label)
-      protocol_error("cli #{label} event data must be a String") if !data.is_a?(String)
+      if !data.is_a?(String)
+        protocol_error("cli #{label} event data must be a String")
+      end
       io.write(data)
       io.flush
     end
@@ -311,7 +319,9 @@ module Urpc
 
       stream.send_async(type: :cancel, reason: :interrupt)
       self.cancel_sent = true
-      $stderr.write("\n\nsent Ctrl-C to server (press again to force quit)\n") if $stderr.tty?
+      if $stderr.tty?
+        $stderr.write("\n\nsent Ctrl-C to server (press again to force quit)\n")
+      end
       $stderr.flush
     rescue IOError, Errno::EPIPE
       start_force_quit_wait

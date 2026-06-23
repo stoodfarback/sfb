@@ -195,7 +195,9 @@ class UrpcCliServerTest < Minitest::Test
   def call_cli(*, chdir: nil, stdin_data: "", env: {})
     bin = File.expand_path("../bin/urpc-call-cli", __dir__)
     options = { stdin_data: stdin_data }
-    options[:chdir] = chdir if chdir
+    if chdir
+      options[:chdir] = chdir
+    end
     Open3.capture3({ "URPC_ROOT" => Urpc.root }.merge(env), bin, *, **options)
   end
 
@@ -491,7 +493,9 @@ class UrpcCliServerTest < Minitest::Test
 
         Process.kill("INT", wait_thread.pid)
         joined = wait_thread.join(5)
-        Process.kill("TERM", wait_thread.pid) if !joined
+        if !joined
+          Process.kill("TERM", wait_thread.pid)
+        end
         assert(joined, "cancel command did not exit")
 
         assert_includes(stdout.read, "cancelled\n")
@@ -518,7 +522,9 @@ class UrpcCliServerTest < Minitest::Test
         Process.kill("INT", wait_thread.pid)
 
         joined = wait_thread.join(3)
-        Process.kill("TERM", wait_thread.pid) if !joined
+        if !joined
+          Process.kill("TERM", wait_thread.pid)
+        end
         assert(joined, "client did not force quit after second Ctrl-C")
 
         stdout_reader.join(1)

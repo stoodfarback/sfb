@@ -162,7 +162,9 @@ class UrpcBidirectionalTest < Minitest::Test
         attr_accessor(:cancel_requested)
 
         def receive_async(value)
-          self.cancel_requested = true if value == :cancel
+          if value == :cancel
+            self.cancel_requested = true
+          end
         end
 
         def run!
@@ -360,7 +362,9 @@ class UrpcBidirectionalTest < Minitest::Test
       bidirectional_client.each_event(bidirectional_stream, normal_stream) do |stream, event|
         source = stream.equal?(bidirectional_stream) ? :bidir : :normal
         events << [source, event.type, event.data]
-        bidirectional_stream.send_sync("ok") if source == :bidir && event.type == :data
+        if source == :bidir && event.type == :data
+          bidirectional_stream.send_sync("ok")
+        end
       end
 
       bidirectional_events = events.select { it[0] == :bidir }

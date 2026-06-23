@@ -10,7 +10,9 @@ module Urpc
       raise(ArgumentError, "invalid wait_for_server: #{wait_for_server.inspect}") if !self.class.valid_wait_for_server?(wait_for_server)
       raise(ArgumentError, "invalid bidirectional: #{bidirectional.inspect}") if ![true, false].include?(bidirectional)
       raise(ArgumentError, "bidirectional cast not supported") if cast && bidirectional
-      wait_for_server = false if wait_for_server.is_a?(Numeric) && wait_for_server <= 0
+      if wait_for_server.is_a?(Numeric) && wait_for_server <= 0
+        wait_for_server = false
+      end
       self.id = id
       self.rpc_key = rpc_key
       self.name = name

@@ -258,7 +258,9 @@ module Urpc
       drained_calls = state_lock.synchronize do
         list = internal_backends_by_key[key] || []
         list.delete(backend)
-        internal_backends_by_key.delete(key) if list.empty?
+        if list.empty?
+          internal_backends_by_key.delete(key)
+        end
         drain_queued_calls_if_no_backends_locked(key)
       end
 
@@ -350,7 +352,9 @@ module Urpc
         active_ids.delete(call.id)
       end
       expired_calls.map(&:rpc_key).uniq.each do |key|
-        compact_queue_locked(key) if backend_count_locked(key) == 0
+        if backend_count_locked(key) == 0
+          compact_queue_locked(key)
+        end
       end
       expired_calls
     end
@@ -367,7 +371,9 @@ module Urpc
           break
         end
         break if !call
-        survivors << call if active_ids.key?(call.id)
+        if active_ids.key?(call.id)
+          survivors << call
+        end
       end
 
       if survivors.empty?
@@ -473,7 +479,9 @@ module Urpc
       abort_broker("bidirectional cast not supported") if cast && bidirectional
 
       header_bytes = SubmitFrame::SUBMIT_VERSION_BYTES + SubmitFrame::SUBMIT_FLAGS_BYTES + SubmitFrame::WIRE_ID_BYTES + 1
-      header_bytes += SubmitFrame::WAIT_TIMEOUT_BYTES if wait_mode == SubmitFrame::WAIT_TIMEOUT_MS
+      if wait_mode == SubmitFrame::WAIT_TIMEOUT_MS
+        header_bytes += SubmitFrame::WAIT_TIMEOUT_BYTES
+      end
       header_bytes += 1 + rpc_key_len + 1 + method_len
 
       body = nil
@@ -630,7 +638,9 @@ module Urpc
         has_backend = backend_count_locked(call.rpc_key) > 0
         can_enqueue = has_backend || call.wait_for_server?
         if can_enqueue
-          start_wait_budget_if_needed_locked(call) if !has_backend
+          if !has_backend
+            start_wait_budget_if_needed_locked(call)
+          end
           enqueue_call_locked(call)
         end
         can_enqueue
@@ -682,7 +692,9 @@ module Urpc
         end
       end
 
-      synthesize_wait_expired_calls([expired_call]) if expired_call
+      if expired_call
+        synthesize_wait_expired_calls([expired_call])
+      end
       claimed
     end
 
@@ -799,7 +811,9 @@ module Urpc
           expired_calls << call
           []
         else
-          track_wait_call_locked(call) if call.wait_deadline
+          if call.wait_deadline
+            track_wait_call_locked(call)
+          end
           enqueue_call_locked(call)
           drain_queued_calls_if_no_backends_locked(key)
         end
@@ -813,7 +827,9 @@ module Urpc
       key = backend.key
       list = backends_by_key[key] || []
       list.delete(backend)
-      backends_by_key.delete(key) if list.empty?
+      if list.empty?
+        backends_by_key.delete(key)
+      end
     end
 
     def drain_queued_calls_if_no_backends_locked(key)

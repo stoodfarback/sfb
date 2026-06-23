@@ -60,7 +60,9 @@ module Urpc
       begin
         handler.send(req_data[:name], req)
       rescue => e
-        stream.error(e) if !stream.is_finished
+        if !stream.is_finished
+          stream.error(e)
+        end
         return
       end
 

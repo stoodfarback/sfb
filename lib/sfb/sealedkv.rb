@@ -105,7 +105,9 @@ module Sfb
         return(load(path)) if path
 
         searched_locations = []
-        searched_locations << "caller #{File.expand_path(caller_start_dir)}" if caller_start_dir
+        if caller_start_dir
+          searched_locations << "caller #{File.expand_path(caller_start_dir)}"
+        end
         searched_locations << "cwd #{File.expand_path(cwd_start_dir)}"
         raise("no #{Sfb::Sealedkv::CONFIG_FILE} found at or above #{searched_locations.join(" or ")}")
       end
@@ -385,7 +387,9 @@ module Sfb
       def self.pointer_for(bytes)
         bytes = String(bytes).b
         pointer = Fiddle::Pointer.malloc([bytes.bytesize, 1].max, Fiddle::RUBY_FREE)
-        pointer[0, bytes.bytesize] = bytes if bytes.bytesize.positive?
+        if bytes.bytesize.positive?
+          pointer[0, bytes.bytesize] = bytes
+        end
         pointer
       end
     end

@@ -77,7 +77,9 @@ module Urpc
       wait_for_ready
       read_frames if ready
     rescue IOError, Errno::EBADF
-      mark_disconnected if !close_requested
+      if !close_requested
+        mark_disconnected
+      end
     rescue => e
       mark_reader_error(e)
     ensure
@@ -163,7 +165,9 @@ module Urpc
         self.disconnected = true
         state_cv.broadcast
       end
-      owner.on_disconnect if should_callback
+      if should_callback
+        owner.on_disconnect
+      end
     rescue => e
       mark_reader_error(e)
     end
@@ -176,7 +180,9 @@ module Urpc
       end
 
       begin
-        owner.error(error) if !owner.finished?
+        if !owner.finished?
+          owner.error(error)
+        end
       rescue
         nil
       end

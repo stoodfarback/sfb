@@ -151,7 +151,9 @@ module Sfb::Test::OutputCapture
       sfb_output_capture_join_reader
       sfb_output_capture_close_reader
       sfb_output_capture_close_original_streams
-      sfb_output_capture_dump(sfb_output_capture_buffer.to_s) if dump || (!passed? && !skipped?)
+      if dump || (!passed? && !skipped?)
+        sfb_output_capture_dump(sfb_output_capture_buffer.to_s)
+      end
       sfb_output_capture_clear
     end
 

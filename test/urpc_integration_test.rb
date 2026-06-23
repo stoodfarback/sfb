@@ -28,7 +28,9 @@ class UrpcIntegrationTest < Minitest::Test
             def add(a, b) = a + b
 
             def record(value)
-              File.open(@cast_path, "a") { it.puts(value) } if @cast_path
+              if @cast_path
+                File.open(@cast_path, "a") { it.puts(value) }
+              end
               nil
             end
           end.new(cast_path)

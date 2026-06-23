@@ -59,7 +59,9 @@ module Urpc
     end
 
     def result
-      each_event {} if !is_finished
+      if !is_finished
+        each_event {}
+      end
       raise(error_value) if error_value
       result_value
     end

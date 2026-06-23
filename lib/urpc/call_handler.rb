@@ -10,9 +10,13 @@ module Urpc
 
     def handle!
       result = run!
-      finish(result) if !finished?
+      if !finished?
+        finish(result)
+      end
     rescue => e
-      error(e) if !finished?
+      if !finished?
+        error(e)
+      end
     end
 
     def run!

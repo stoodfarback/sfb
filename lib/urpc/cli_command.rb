@@ -100,7 +100,9 @@ module Urpc
 
     def list_env(include_values: false)
       payload = { op: :list_env }
-      payload[:include_values] = true if include_values
+      if include_values
+        payload[:include_values] = true
+      end
       client_op(payload)
     end
 
@@ -125,7 +127,9 @@ module Urpc
     end
 
     def receive_async(value)
-      self.cancel_requested = true if value.is_a?(Hash) && value[:type] == :cancel
+      if value.is_a?(Hash) && value[:type] == :cancel
+        self.cancel_requested = true
+      end
     end
 
     def on_disconnect

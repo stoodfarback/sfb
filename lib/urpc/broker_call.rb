@@ -158,7 +158,9 @@ module Urpc
       close_reply_io
       return if cast?
       File.unlink(reply_path) rescue nil
-      File.unlink(inbox_path) rescue nil if inbox_path
+      if inbox_path
+        File.unlink(inbox_path) rescue nil
+      end
     end
 
     class ReplySink

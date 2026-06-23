@@ -28,7 +28,9 @@ module Sfb
       require("minitest")
 
       # Prevent autorun from installing at_exit hook if we're in list mode
-      Minitest.class_variable_set(:@@installed_at_exit, true) if list_only
+      if list_only
+        Minitest.class_variable_set(:@@installed_at_exit, true)
+      end
 
       # Load all test files, tracking which file defines each class
       test_files = Dir[file_pattern]
