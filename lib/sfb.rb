@@ -9,7 +9,6 @@ module Sfb
   autoload(:Util, "sfb/util")
   autoload(:Store, "sfb/store")
   autoload(:Memo, "sfb/memo")
-  autoload(:KV, "sfb/kv")
   autoload(:WaitIndicator, "sfb/wait_indicator")
   autoload(:UrpcKv, "sfb/urpc_kv")
   autoload(:LexConstShadow, "sfb/lex_const_shadow")
