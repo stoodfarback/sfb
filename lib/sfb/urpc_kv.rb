@@ -52,6 +52,10 @@ module Sfb
       Scope.new(prefix)
     end
 
+    def self.key(key)
+      Key.new(key)
+    end
+
     def self.valid_string!(value)
       raise(ArgumentError) if value.nil?
       value = value.to_s
@@ -126,6 +130,51 @@ module Sfb
 
       def with_prefix(sub_prefix)
         Sfb::UrpcKv.with_prefix(prefix + Sfb::UrpcKv.valid_string!(sub_prefix))
+      end
+
+      def key(key)
+        Sfb::UrpcKv.key(full_key(key))
+      end
+    end
+
+    class Key
+      attr_accessor(:key)
+
+      def initialize(key)
+        self.key = Sfb::UrpcKv.valid_string!(key).dup.freeze
+        freeze
+      end
+
+      def inspect
+        "#<#{self.class} key=#{key.inspect}>"
+      end
+
+      def read
+        Sfb::UrpcKv.read(key)
+      end
+
+      def get
+        Sfb::UrpcKv.get(key)
+      end
+
+      def set(value, ex: nil)
+        Sfb::UrpcKv.set(key, value, ex:)
+      end
+
+      def delete
+        Sfb::UrpcKv.delete(key)
+      end
+
+      def exists?
+        Sfb::UrpcKv.exists?(key)
+      end
+
+      def expire(seconds)
+        Sfb::UrpcKv.expire(key, seconds)
+      end
+
+      def fetch(ex: nil, &)
+        Sfb::UrpcKv.fetch(key, ex:, &)
       end
     end
   end

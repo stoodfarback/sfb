@@ -125,6 +125,39 @@ class UrpcKvFacadeTest < Minitest::Test
     assert_equal("nested-value", Sfb::UrpcKv.get("#{prefix}nested:item"))
   end
 
+  def test_key_wrapper_works_from_root_and_scope
+    full_key = root_key("single")
+    root_single = Sfb::UrpcKv.key(full_key)
+
+    assert_equal(full_key, root_single.key)
+    assert(root_single.key.frozen?)
+    assert(root_single.frozen?)
+    assert_equal("#<Sfb::UrpcKv::Key key=#{full_key.inspect}>", root_single.inspect)
+    assert_equal([false, nil], root_single.read)
+    assert_nil(root_single.get)
+    assert_equal(false, root_single.exists?)
+
+    assert_equal("value", root_single.set("value"))
+    assert_equal([true, "value"], root_single.read)
+    assert_equal("value", root_single.get)
+    assert_equal(true, root_single.exists?)
+    assert_equal("value", Sfb::UrpcKv.get(full_key))
+
+    assert_equal(true, root_single.expire(0))
+    assert_equal([false, nil], root_single.read)
+
+    scoped_kv = kv
+    scoped_single = scoped_kv.key(:slot)
+    calls = 0
+
+    assert_equal(scoped_kv.full_key(:slot), scoped_single.key)
+    assert_equal("computed", scoped_single.fetch { calls += 1; "computed" })
+    assert_equal("computed", scoped_single.fetch { calls += 1; "unused" })
+    assert_equal(1, calls)
+    assert_equal([true, "computed"], scoped_single.delete)
+    assert_equal([false, nil], scoped_single.delete)
+  end
+
   def test_prefix_and_key_values_use_to_s_except_nil_or_empty
     scoped_kv = Sfb::UrpcKv.with_prefix(:symbol_prefix)
 
@@ -137,12 +170,17 @@ class UrpcKvFacadeTest < Minitest::Test
     assert_raises(ArgumentError) { Sfb::UrpcKv.delete_all_with_prefix("") }
     assert_raises(ArgumentError) { Sfb::UrpcKv.with_prefix(nil) }
     assert_raises(ArgumentError) { Sfb::UrpcKv.with_prefix("") }
+    assert_raises(ArgumentError) { Sfb::UrpcKv.key(nil) }
+    assert_raises(ArgumentError) { Sfb::UrpcKv.key("") }
     assert_raises(ArgumentError) { scoped_kv.full_key(nil) }
     assert_raises(ArgumentError) { scoped_kv.full_key("") }
+    assert_raises(ArgumentError) { scoped_kv.key(nil) }
+    assert_raises(ArgumentError) { scoped_kv.key("") }
   end
 
   def test_fetch_requires_a_block
     assert_raises(ArgumentError) { Sfb::UrpcKv.fetch(root_key("missing")) }
     assert_raises(ArgumentError) { kv.fetch("missing") }
+    assert_raises(ArgumentError) { Sfb::UrpcKv.key(root_key("missing")).fetch }
   end
 end
