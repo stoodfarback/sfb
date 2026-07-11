@@ -1,30 +1,42 @@
 # frozen_string_literal: true
 
 module Urpc
-  class BidirectionalHandler < CallHandler
-    # URPC ping-pong round-trip is typically <1ms, so 1s is a reasonable default.
-    INBOX_OPEN_TIMEOUT = 1.0
+  class BidirectionalHandler < Urpc::Handler
+    attr_accessor(:input)
 
-    attr_accessor(:inbox)
+    def initialize(req)
+      super(req)
+      if !req.bidirectional?
+        raise(ArgumentError, "urpc request is not bidirectional")
+      end
+      self.input = Urpc::BidirectionalInput.new(req, owner: self)
+    end
 
-    def handle!
-      setup_inbox!
+    def run
+      input.start
       super
     ensure
-      inbox&.close
+      input.close
     end
 
-    def setup_inbox!
-      self.inbox = Inbox.new(owner: self, path: req.inbox_path)
-      inbox.start
-      send_control(:inbox_ready, nil)
-      inbox.await_ready!(timeout: INBOX_OPEN_TIMEOUT)
+    def receive
+      input.receive
     end
 
-    def receive = inbox.receive
-    def disconnected? = inbox.disconnected?
+    def receive_async(value)
+      raise(NotImplementedError, "#{self.class} must implement #receive_async for #{value.inspect}")
+    end
 
-    def receive_async(_value); end
-    def on_disconnect; end
+    def disconnected?
+      input.disconnected?
+    end
+
+    def close_input
+      input.close
+    end
+
+    def on_disconnect
+      nil
+    end
   end
 end

@@ -12,7 +12,7 @@ module Sfb
     CLIENT_TIMEOUT_SECONDS = 1
     CLIENT_WAIT_FOR_SERVER_SECONDS = 1
 
-    # Raises on any failure (missing secret, broker down, timeout, decrypt
+    # Raises on any failure (missing secret, server unavailable, timeout, decrypt
     # failure, etc). Errors are not rescued here; the consumer decides how
     # to handle them and which Urpc errors to distinguish.
     def self.get(secret_name)

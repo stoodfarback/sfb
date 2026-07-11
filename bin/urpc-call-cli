@@ -1,8 +1,0 @@
-#!/usr/bin/env zsh
-
-source $HOME/.rvm/scripts/rvm
-
-script=`realpath $0`
-app_dir=${script:a:h:h}
-export BUNDLE_GEMFILE=$app_dir/Gemfile
-exec bundle exec ruby -I$app_dir/lib -rsfb -e 'exit(Urpc.run_call_cli)' -- "$@"

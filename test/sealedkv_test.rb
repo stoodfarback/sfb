@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative("urpc_test_helper")
+require_relative("test_helper")
 
 class SealedkvTest < Minitest::Test
   def teardown
@@ -37,10 +37,7 @@ class SealedkvTest < Minitest::Test
       secret = "secret\0bytes\n\xff".b
       blob = encrypted_blob(project_name: "proj", secret_name: "api_key", key:, secret:)
 
-      with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[proj api_key] => blob }))
-        wait_for_backend(Sfb::Sealedkv::RPC_KEY)
-
+      with_urpc_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[proj api_key] => blob })) do
         nested_dir = File.join(dir, "nested")
         Dir.mkdir(nested_dir)
         with_chdir(nested_dir) do
@@ -65,10 +62,7 @@ class SealedkvTest < Minitest::Test
       secret = "from caller"
       blob = encrypted_blob(project_name: "callerproj", secret_name: "api_key", key:, secret:)
 
-      with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[callerproj api_key] => blob }))
-        wait_for_backend(Sfb::Sealedkv::RPC_KEY)
-
+      with_urpc_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[callerproj api_key] => blob })) do
         with_chdir(cwd_dir) do
           assert_equal(secret, caller.get_secret("api_key"))
         end
@@ -91,10 +85,7 @@ class SealedkvTest < Minitest::Test
       secret = "from cwd"
       blob = encrypted_blob(project_name: "cwdproj", secret_name: "token", key:, secret:)
 
-      with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[cwdproj token] => blob }))
-        wait_for_backend(Sfb::Sealedkv::RPC_KEY)
-
+      with_urpc_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[cwdproj token] => blob })) do
         with_chdir(cwd_project_dir) do
           assert_equal(secret, caller.get_secret("token"))
         end
@@ -111,10 +102,7 @@ class SealedkvTest < Minitest::Test
         encrypted_blob(project_name: "proj", secret_name: "token", key:, secret: "second"),
       ]
 
-      with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[proj token] => blobs }))
-        wait_for_backend(Sfb::Sealedkv::RPC_KEY)
-
+      with_urpc_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({ %w[proj token] => blobs })) do
         with_chdir(dir) do
           assert_equal("first", Sfb::Sealedkv.get("token"))
           assert_equal("second", Sfb::Sealedkv.get("token"))
@@ -148,10 +136,7 @@ class SealedkvTest < Minitest::Test
         %w[projb token] => encrypted_blob(project_name: "projb", secret_name: "token", key: key_b, secret: "second"),
       }
 
-      with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new(blobs))
-        wait_for_backend(Sfb::Sealedkv::RPC_KEY)
-
+      with_urpc_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new(blobs)) do
         with_chdir(cwd_dir) do
           assert_equal("first", caller_a.get_secret("token"))
           File.binwrite(
@@ -171,10 +156,7 @@ class SealedkvTest < Minitest::Test
       key = Sfb::Sealedkv::Sodium.random_bytes(Sfb::Sealedkv::KEY_BYTES)
       write_identity(dir, project_name: "proj", key:)
 
-      with_broker do
-        start_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({}))
-        wait_for_backend(Sfb::Sealedkv::RPC_KEY)
-
+      with_urpc_server(Sfb::Sealedkv::RPC_KEY, BlobServer.new({})) do
         with_chdir(dir) do
           error = assert_raises(RuntimeError) { Sfb::Sealedkv.get("missing") }
           assert_includes(error.message, "secret not found: proj/missing")

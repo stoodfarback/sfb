@@ -1,82 +1,60 @@
 # frozen_string_literal: true
 
 module Urpc
-  autoload(:Backend, "urpc/backend")
-  autoload(:Broker, "urpc/broker")
-  autoload(:BrokerCall, "urpc/broker_call")
+  autoload(:Bidirectional, "urpc/bidirectional")
   autoload(:BidirectionalHandler, "urpc/bidirectional_handler")
-  autoload(:Call, "urpc/call")
-  autoload(:CallHandler, "urpc/call_handler")
-  autoload(:CliCall, "urpc/cli_call")
-  autoload(:CliClient, "urpc/cli_client")
-  autoload(:CliCommand, "urpc/cli_command")
+  autoload(:BidirectionalInput, "urpc/bidirectional_input")
+  autoload(:CallArtifacts, "urpc/call_artifacts")
   autoload(:Client, "urpc/client")
-  autoload(:Event, "urpc/event")
-  autoload(:EventStream, "urpc/event_stream")
-  autoload(:Frames, "urpc/frames")
-  autoload(:Inbox, "urpc/inbox")
-  autoload(:InternalBackend, "urpc/internal_backend")
-  autoload(:Introspection, "urpc/introspection")
-  autoload(:MonitorSink, "urpc/monitor_sink")
+  autoload(:Deadline, "urpc/deadline")
+  autoload(:Dispatch, "urpc/dispatch")
+  autoload(:Executor, "urpc/executor")
+  autoload(:Fifo, "urpc/fifo")
+  autoload(:FrameReader, "urpc/frame_reader")
+  autoload(:FrameWriter, "urpc/frame_writer")
+  autoload(:Handler, "urpc/handler")
+  autoload(:Id, "urpc/id")
+  autoload(:InputStream, "urpc/input_stream")
+  autoload(:Paths, "urpc/paths")
+  autoload(:ProcessIpc, "urpc/process_ipc")
   autoload(:Req, "urpc/req")
-  autoload(:ResponseStream, "urpc/response_stream")
+  autoload(:RequestRunner, "urpc/request_runner")
   autoload(:Server, "urpc/server")
-  autoload(:StreamServer, "urpc/stream_server")
+  autoload(:ServerCall, "urpc/server_call")
+  autoload(:ServiceDir, "urpc/service_dir")
+  autoload(:Stream, "urpc/stream")
+  autoload(:StreamFrame, "urpc/stream_frame")
   autoload(:SubmitFrame, "urpc/submit_frame")
-  autoload(:Util, "urpc/util")
+  autoload(:SubmitReader, "urpc/submit_reader")
+  autoload(:SubmitWriter, "urpc/submit_writer")
 
-  DEFAULT_ROOT = "/tmp/urpc"
+  DEFAULT_ROOT = "/tmp/urpc2"
+
+  class TransportError < StandardError; end
+  class NoServerError < TransportError; end
+  class TimeoutException < TransportError; end
+  class ClientDisconnected < StandardError; end
+  class ServerDisconnected < TransportError; end
+
+  class RemoteException < StandardError
+    attr_accessor(:remote_backtrace, :remote_exception)
+
+    def initialize(message, remote_backtrace = [], remote_exception: nil)
+      super(message)
+      self.remote_backtrace = remote_backtrace
+      self.remote_exception = remote_exception
+    end
+  end
+
+  class << self
+    attr_accessor(:configured_root)
+  end
 
   def self.root
-    @root ||= (ENV["URPC_ROOT"]&.dup || DEFAULT_ROOT).freeze
+    configured_root || ENV["URPC_ROOT"] || DEFAULT_ROOT
   end
 
   def self.set_root(path)
-    @root = path.to_s.freeze
-  end
-
-  def self.broker_sock = File.join(root, "broker.sock")
-  def self.monitor_sock = File.join(root, "monitor.sock")
-  def self.in_fifo = File.join(root, "in.fifo")
-  def self.requests_dir = File.join(root, "requests")
-  def self.replies_dir = File.join(root, "replies")
-  def self.inboxes_dir = File.join(root, "inboxes")
-
-  ID_RE = /\A[a-f0-9]{32}\z/
-  RESERVED_KEY = "urpc"
-
-  class BrokerUnavailable < StandardError; end
-  class NoServerError < StandardError; end
-  class TimeoutException < StandardError; end
-
-  class RemoteException < StandardError
-    attr_accessor(:remote_backtrace)
-
-    def initialize(message, remote_backtrace = [])
-      super(message)
-      self.remote_backtrace = remote_backtrace
-    end
-  end
-
-  def self.run_broker
-    Process.setproctitle("[sfb_urpc] #{ARGV.join(" ")}")
-    broker = Broker.new
-
-    Signal.trap("TERM") { broker.shutdown = true }
-    Signal.trap("INT") { broker.shutdown = true }
-
-    begin
-      broker.run
-    ensure
-      broker.stop
-    end
-  end
-
-  def self.run_call
-    CliCall.run
-  end
-
-  def self.run_call_cli
-    CliClient.run
+    self.configured_root = path.to_s.freeze
   end
 end

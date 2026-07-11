@@ -2,30 +2,134 @@
 
 module Urpc
   class Req
-    attr_accessor(:args, :kargs, :stream, :bidirectional, :inbox_path)
+    INPUT_TYPES = [:sync, :async].freeze
 
-    def initialize(args:, kargs:, stream:, bidirectional: false, inbox_path: nil)
-      self.args = args
-      self.kargs = kargs
-      self.stream = stream
-      self.bidirectional = bidirectional
-      self.inbox_path = inbox_path
+    attr_accessor(:call, :finished, :response_mutex)
+
+    def initialize(call)
+      self.call = call
+      self.finished = false
+      self.response_mutex = Mutex.new
     end
 
-    def bidirectional? = bidirectional == true
-
-    def handle_with!(klass, *, **kargs)
-      raise(ArgumentError, "#{klass} must be a Urpc::CallHandler") if !klass.is_a?(Class) || !(klass <= CallHandler)
-      handler = klass.new(self, *, **kargs)
-      handler.handle!
+    def name
+      call.submit.name
     end
 
-    def handle_bidirectional!(klass, *, **kargs)
-      raise(ArgumentError, "#{klass} must be a Urpc::BidirectionalHandler") if !klass.is_a?(Class) || !(klass <= BidirectionalHandler)
-      raise(ArgumentError, "call was not requested as bidirectional") if !bidirectional?
-      raise(ArgumentError, "missing inbox path") if !inbox_path.is_a?(String) || inbox_path.empty?
-      handler = klass.new(self, *, **kargs)
-      handler.handle!
+    def args
+      call.submit.args
+    end
+
+    def kargs
+      call.submit.kargs
+    end
+
+    def cast?
+      call.cast?
+    end
+
+    def bidirectional?
+      call.bidirectional?
+    end
+
+    def data(value)
+      response_mutex.synchronize do
+        ensure_open!
+        return if cast?
+        call.output.write_frame(:data, value)
+      end
+      nil
+    rescue Errno::EPIPE => e
+      client_disconnected!(e)
+    end
+
+    def finish(value = nil)
+      terminal_response(:return, value, if_open: false)
+    end
+
+    def finish_if_open(value = nil)
+      terminal_response(:return, value, if_open: true)
+    end
+
+    def error(exception)
+      terminal_response(:error, exception, if_open: false)
+    end
+
+    def error_if_open(exception)
+      terminal_response(:error, exception, if_open: true)
+    end
+
+    def finished?
+      finished
+    end
+
+    def next_input
+      ensure_open!
+      if !bidirectional?
+        raise(IOError, "urpc request has no input stream")
+      end
+
+      frame = call.input_reader.next_frame
+      if !frame
+        raise(EOFError, "urpc input disconnected")
+      end
+      if !INPUT_TYPES.include?(frame.type)
+        raise("unexpected urpc input frame: #{frame.type}")
+      end
+
+      frame
+    end
+
+    def close
+      response_mutex.synchronize do
+        return if finished?
+
+        self.finished = true
+        call.close
+      end
+      nil
+    end
+
+    def write_terminal(type, value)
+      ensure_open!
+
+      if cast?
+        self.finished = true
+        call.close
+        return
+      end
+
+      bytes = Urpc::StreamFrame.pack(type, value)
+      begin
+        call.output.write(bytes)
+      ensure
+        self.finished = true
+        call.close
+      end
+      nil
+    end
+
+    def terminal_response(type, value, if_open:)
+      response_mutex.synchronize do
+        return false if if_open && finished?
+
+        payload = type == :error ? Urpc::StreamFrame::ErrorPayload.encode(value) : value
+        write_terminal(type, payload)
+        if_open ? true : nil
+      end
+    rescue Errno::EPIPE => e
+      client_disconnected!(e)
+    end
+
+    def ensure_open!
+      if finished?
+        raise(IOError, "urpc request is finished")
+      end
+    end
+
+    def client_disconnected!(error)
+      close
+      raise(Urpc::ClientDisconnected, error.message)
     end
   end
 end

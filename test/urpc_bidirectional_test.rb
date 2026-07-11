@@ -1,384 +1,232 @@
 # frozen_string_literal: true
 
-require_relative("urpc_test_helper")
+require_relative("test_helper")
 
 class UrpcBidirectionalTest < Minitest::Test
-  def bidirectional_handler(handler_class)
-    Object.new.tap do |handler|
-      handler.define_singleton_method(:call) do |req|
-        req.handle_bidirectional!(handler_class)
+  def test_await_input_consumes_input_ready_and_writes_ready
+    with_bidirectional_pair do |client, server|
+      server.output.write_frame(:input_ready)
+
+      input = client.await_input
+
+      assert_equal(true, input.open?)
+      assert_equal(false, File.exist?(server.paths.input_fifo(server.id)))
+      assert_equal(Urpc::StreamFrame::Frame.new(type: :ready, value: nil), server.input.next_frame)
+      assert_equal(true, client.input_open?)
+    end
+  end
+
+  def test_send_sync_and_async_await_input_automatically
+    with_bidirectional_pair do |client, server|
+      server.output.write_frame(:input_ready)
+
+      assert_nil(client.send_sync("question"))
+      assert_nil(client.send_async({ cancel: true }))
+
+      assert_equal(Urpc::StreamFrame::Frame.new(type: :ready, value: nil), server.input.next_frame)
+      assert_equal(Urpc::StreamFrame::Frame.new(type: :sync, value: "question"), server.input.next_frame)
+      assert_equal(Urpc::StreamFrame::Frame.new(type: :async, value: { cancel: true }), server.input.next_frame)
+    end
+  end
+
+  def test_concurrent_initial_sends_share_one_input_attachment
+    with_bidirectional_pair do |client, server|
+      start = Thread::Queue.new
+      send_threads = [
+        Thread.new do
+          start.pop
+          client.send_sync(:one)
+        end,
+        Thread.new do
+          start.pop
+          client.send_async(:two)
+        end,
+      ]
+      send_threads.size.times { start << true }
+      wait_for_threads_to_sleep(*send_threads)
+
+      server.output.write_frame(:input_ready)
+      server.output.write_frame(:data, "wake any duplicate prologue reader")
+
+      send_threads.each { assert_nil(it.value) }
+      assert_equal(Urpc::StreamFrame::Frame.new(type: :ready, value: nil), server.input.next_frame)
+      input_frames = 2.times.map { server.input.next_frame }
+      assert_equal(
+        [[:async, :two], [:sync, :one]],
+        input_frames.map { [it.type, it.value] }.sort_by(&:first),
+      )
+    ensure
+      send_threads&.each do |thread|
+        thread.join(1)
+        thread.kill if thread.alive?
       end
     end
   end
 
-  def test_handle_with_runs_call_handler_and_auto_finishes
-    with_broker do
-      handler_class = Class.new(Urpc::CallHandler) do
-        def run!
-          data("started")
-          "done"
-        end
-      end
+  def test_close_input_waits_for_in_progress_frame
+    with_bidirectional_pair do |client, server|
+      server.output.write_frame(:input_ready)
+      client.await_input
+      assert_equal(Urpc::StreamFrame::Frame.new(type: :ready, value: nil), server.input.next_frame)
 
-      handler = Object.new
-      handler.define_singleton_method(:call) do |req|
-        req.handle_with!(handler_class)
-      end
+      payload = "x" * (256 * 1024)
+      send_thread = Thread.new { client.send_sync(payload) }
+      wait_for_threads_to_sleep(send_thread)
+      close_thread = Thread.new { client.close_input }
+      wait_for_threads_to_sleep(close_thread)
 
-      start_stream_server("call_handler", handler)
-      wait_for_backend("call_handler")
-
-      stream = Urpc::Client.new("call_handler", timeout: 5).stream(:call)
-      events = []
-      stream.each_event { events << [it.type, it.data] }
-
-      assert_equal([[:data, "started"], [:return, "done"]], events)
+      assert(close_thread.alive?)
+      assert_equal(Urpc::StreamFrame::Frame.new(type: :sync, value: payload), server.input.next_frame)
+      assert_nil(send_thread.value)
+      assert_nil(close_thread.value)
+      assert_nil(server.input.next_frame)
+    ensure
+      send_thread&.join(1)
+      send_thread&.kill if send_thread&.alive?
+      close_thread&.join(1)
+      close_thread&.kill if close_thread&.alive?
     end
   end
 
-  def test_handle_bidirectional_rejects_non_bidirectional_handler
-    with_broker do
-      handler_class = Class.new(Urpc::CallHandler) do
-        def run! = "done"
-      end
+  def test_each_consumes_prologue_then_reads_output_data
+    with_bidirectional_pair do |client, server|
+      server.output.write_frame(:input_ready)
+      server.output.write_frame(:data, "one")
+      server.output.write_frame(:return, "done")
 
-      handler = Object.new
-      handler.define_singleton_method(:call) do |req|
-        req.handle_bidirectional!(handler_class)
-      end
-
-      start_stream_server("bad_bidirectional", handler)
-      wait_for_backend("bad_bidirectional")
-
-      e = assert_raises(ArgumentError) do
-        Urpc::Client.new("bad_bidirectional", timeout: 5).bidirectional_stream(:call).result
-      end
-      assert_match(/must be a Urpc::BidirectionalHandler/, e.message)
+      values = client.each
+      assert_equal("one", values.next)
+      assert_raises(StopIteration) { values.next }
+      assert_equal(true, client.finished?)
+      assert_equal(false, client.input_open?)
+      assert_equal("done", client.result)
     end
   end
 
-  def test_handle_bidirectional_requires_bidirectional_request
-    with_broker do
-      handler_class = Class.new(Urpc::BidirectionalHandler) do
-        def run! = "done"
-      end
+  def test_result_consumes_prologue_and_returns_terminal_value
+    with_bidirectional_pair do |client, server|
+      server.output.write_frame(:input_ready)
+      server.output.write_frame(:data, "ignored")
+      server.output.write_frame(:return, 123)
 
-      start_stream_server("requires_bidirectional", bidirectional_handler(handler_class))
-      wait_for_backend("requires_bidirectional")
-
-      e = assert_raises(ArgumentError) do
-        Urpc::Client.new("requires_bidirectional", timeout: 5).call(:call)
-      end
-      assert_match(/not requested as bidirectional/, e.message)
+      assert_equal(123, client.result)
+      assert_equal(true, client.finished?)
+      assert_equal(false, client.input_open?)
     end
   end
 
-  def test_await_inbox_opens_before_application_data
-    with_broker do
-      handler_class = Class.new(Urpc::BidirectionalHandler) do
-        def run!
-          data("after-open")
-          finish("done")
-        end
-      end
+  def test_close_input_before_user_events_sends_ready_then_half_closes
+    with_bidirectional_pair do |client, server|
+      server.output.write_frame(:input_ready)
 
-      start_stream_server("await_inbox", bidirectional_handler(handler_class))
-      wait_for_backend("await_inbox")
+      assert_nil(client.close_input)
 
-      stream = Urpc::Client.new("await_inbox", timeout: 5).bidirectional_stream(:call)
-      assert(stream.await_inbox)
-      assert(stream.inbox_open?)
-      event = stream.next_event
-      assert_equal([:data, "after-open"], [event.type, event.data])
-      assert_equal("done", stream.result)
+      assert_equal(false, client.input_open?)
+      assert_equal(Urpc::StreamFrame::Frame.new(type: :ready, value: nil), server.input.next_frame)
+      assert_nil(server.input.next_frame)
+      assert_raises(IOError) { client.send_sync("late") }
     end
   end
 
-  def test_bidirectional_request_metadata_uses_broker_owned_inbox_path
-    with_broker do
-      observed = Queue.new
-      handler_class = Class.new(Urpc::BidirectionalHandler) do
-        attr_accessor(:observed)
+  def test_unexpected_prologue_raises
+    input, output = IO.pipe
+    writer = Urpc::FrameWriter.new(output)
+    reader = Urpc::FrameReader.new(input, timeout: 1)
+    paths = Urpc::Paths.new("svc")
+    client = Urpc::Bidirectional.new(reader, paths:, id: Urpc::Id.from_hex("0123456789abcdef"))
+    writer.write_frame(:data, "too soon")
 
-        def initialize(req, observed:)
-          super(req)
-          self.observed = observed
-        end
+    error = assert_raises(RuntimeError) { client.await_input }
 
-        def setup_inbox!
-          observed << [req.bidirectional?, req.inbox_path]
-          super
-        end
+    assert_match(/expected INPUT_READY/, error.message)
+  ensure
+    close_io(client)
+    close_io(writer)
+  end
 
-        def run!
-          finish("done")
-        end
-      end
+  def test_eof_before_input_ready_maps_to_server_disconnected
+    input, output = IO.pipe
+    reader = Urpc::FrameReader.new(input, timeout: 1)
+    paths = Urpc::Paths.new("svc")
+    client = Urpc::Bidirectional.new(reader, paths:, id: Urpc::Id.from_hex("0123456789abcdef"))
+    output.close
 
-      handler = Object.new
-      handler.define_singleton_method(:call) do |req|
-        req.handle_bidirectional!(handler_class, observed:)
-      end
+    error = assert_raises(Urpc::ServerDisconnected) { client.await_input }
+    assert(client.finished?)
+    assert(client.closed?)
+    assert_equal(false, client.input_open?)
+    repeated_error = assert_raises(Urpc::ServerDisconnected) { client.result }
+    assert_same(error, repeated_error)
+  ensure
+    close_io(client)
+    close_io(output)
+  end
 
-      start_stream_server("metadata_inbox", handler)
-      wait_for_backend("metadata_inbox")
+  def test_timeout_before_input_ready_finishes_bidirectional
+    input, output = IO.pipe
+    reader = Urpc::FrameReader.new(input, timeout: 0.001)
+    paths = Urpc::Paths.new("svc")
+    client = Urpc::Bidirectional.new(reader, paths:, id: Urpc::Id.from_hex("0123456789abcdef"))
 
-      stream = Urpc::Client.new("metadata_inbox", timeout: 5).bidirectional_stream(:call)
-      assert(stream.await_inbox)
-      bidirectional, path = observed.pop
+    assert_raises(Urpc::TimeoutException) { client.await_input }
+    assert(client.finished?)
+    assert(client.closed?)
+    assert_equal(false, client.input_open?)
+  ensure
+    close_io(client)
+    close_io(output)
+  end
 
-      assert_equal(true, bidirectional)
-      assert_equal(Urpc::Call.inbox_path(stream.id), path)
-      assert_equal("done", stream.result)
+  def test_close_closes_input_and_output
+    with_bidirectional_pair do |client, server|
+      server.output.write_frame(:input_ready)
+      client.await_input
+
+      client.close
+
+      assert_equal(false, client.input_open?)
+      assert_equal(true, client.closed?)
     end
   end
 
-  def test_sync_prompt_round_trip
-    with_broker do
-      handler_class = Class.new(Urpc::BidirectionalHandler) do
-        def run!
-          data(prompt: "Apply changes?")
-          answer = receive
-          finish(answer == "y" ? "applied" : "aborted")
-        end
+  ServerSide = Data.define(:paths, :id, :artifacts, :output, :input)
+
+  def wait_for_threads_to_sleep(*threads)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 1
+    loop do
+      return if threads.all? { it.status == "sleep" }
+      if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+        raise("threads did not block in time")
       end
-
-      start_stream_server("sync_prompt", bidirectional_handler(handler_class))
-      wait_for_backend("sync_prompt")
-
-      stream = Urpc::Client.new("sync_prompt", timeout: 5).bidirectional_stream(:call)
-      event = stream.next_event
-      assert_equal(:data, event.type)
-      assert_equal({ prompt: "Apply changes?" }, event.data)
-
-      stream.send_sync("y")
-      assert_equal("applied", stream.result)
+      Thread.pass
     end
   end
 
-  def test_async_cancel_stops_long_running_work
-    with_broker do
-      handler_class = Class.new(Urpc::BidirectionalHandler) do
-        attr_accessor(:cancel_requested)
+  def with_bidirectional_pair
+    with_urpc_root do
+      paths = Urpc::ServiceDir.new("svc").prepare!
+      submission = Urpc::SubmitFrame::Submission.build(:chat, [], {}, cast: false, bidirectional: true)
+      id = submission.id
+      artifacts = Urpc::CallArtifacts.prepare(paths, submission)
+      output_io = File.open(paths.output_fifo(id), File::WRONLY | File::NONBLOCK)
+      input_io = File.open(paths.input_fifo(id), File::RDONLY | File::NONBLOCK)
 
-        def receive_async(value)
-          if value == :cancel
-            self.cancel_requested = true
-          end
-        end
+      client_reader = Urpc::FrameReader.new(artifacts.output_io, timeout: 1)
+      client = Urpc::Bidirectional.new(client_reader, paths:, id:)
+      server = ServerSide.new(
+        paths:,
+        id:,
+        artifacts:,
+        output: Urpc::FrameWriter.new(output_io),
+        input: Urpc::FrameReader.new(input_io, timeout: 1),
+      )
 
-        def run!
-          data("started")
-          100.times do
-            break if cancel_requested
-            sleep(0.01)
-          end
-          finish(cancel_requested ? "cancelled" : "completed")
-        end
-      end
-
-      start_stream_server("async_cancel", bidirectional_handler(handler_class))
-      wait_for_backend("async_cancel")
-
-      stream = Urpc::Client.new("async_cancel", timeout: 5).bidirectional_stream(:call)
-      assert_equal("started", stream.next_event.data)
-      stream.send_async(:cancel)
-
-      assert_equal("cancelled", stream.result)
-    end
-  end
-
-  def test_close_inbox_disconnects_server_receive
-    with_broker do
-      handler_class = Class.new(Urpc::BidirectionalHandler) do
-        def run!
-          data("waiting")
-          receive
-          finish("received")
-        rescue EOFError
-          finish("disconnected")
-        end
-      end
-
-      start_stream_server("disconnect_receive", bidirectional_handler(handler_class))
-      wait_for_backend("disconnect_receive")
-
-      stream = Urpc::Client.new("disconnect_receive", timeout: 5).bidirectional_stream(:call)
-      assert_equal("waiting", stream.next_event.data)
-      stream.close_inbox
-
-      assert_equal("disconnected", stream.result)
-    end
-  end
-
-  def test_inbox_fifo_is_unlinked_after_success
-    with_broker do
-      paths = Queue.new
-      handler_class = Class.new(Urpc::BidirectionalHandler) do
-        attr_accessor(:paths)
-
-        def initialize(req, paths:)
-          super(req)
-          self.paths = paths
-        end
-
-        def setup_inbox!
-          super
-          paths << inbox.path
-        end
-
-        def run!
-          finish("done")
-        end
-      end
-
-      handler = Object.new
-      handler.define_singleton_method(:call) do |req|
-        req.handle_bidirectional!(handler_class, paths:)
-      end
-
-      start_stream_server("cleanup_inbox", handler)
-      wait_for_backend("cleanup_inbox")
-
-      stream = Urpc::Client.new("cleanup_inbox", timeout: 5).bidirectional_stream(:call)
-      assert(stream.await_inbox)
-      path = paths.pop
-      assert_equal(Urpc::Call.inbox_path(stream.id), path)
-      assert_equal("done", stream.result)
-      assert(poll_until { !File.exist?(path) }, "inbox FIFO was not unlinked: #{path}")
-    end
-  end
-
-  def test_inbox_fifo_is_unlinked_after_error
-    with_broker do
-      paths = Queue.new
-      handler_class = Class.new(Urpc::BidirectionalHandler) do
-        attr_accessor(:paths)
-
-        def initialize(req, paths:)
-          super(req)
-          self.paths = paths
-        end
-
-        def setup_inbox!
-          super
-          paths << inbox.path
-        end
-
-        def run!
-          raise("boom")
-        end
-      end
-
-      handler = Object.new
-      handler.define_singleton_method(:call) do |req|
-        req.handle_bidirectional!(handler_class, paths:)
-      end
-
-      start_stream_server("cleanup_error_inbox", handler)
-      wait_for_backend("cleanup_error_inbox")
-
-      stream = Urpc::Client.new("cleanup_error_inbox", timeout: 5).bidirectional_stream(:call)
-      assert(stream.await_inbox)
-      path = paths.pop
-      e = assert_raises(RuntimeError) { stream.result }
-      assert_equal("boom", e.message)
-      assert(poll_until { !File.exist?(path) }, "inbox FIFO was not unlinked: #{path}")
-    end
-  end
-
-  def test_inbox_fifo_is_unlinked_after_client_disconnect
-    with_broker do
-      paths = Queue.new
-      handler_class = Class.new(Urpc::BidirectionalHandler) do
-        attr_accessor(:paths)
-
-        def initialize(req, paths:)
-          super(req)
-          self.paths = paths
-        end
-
-        def setup_inbox!
-          super
-          paths << inbox.path
-        end
-
-        def run!
-          receive
-          finish("received")
-        rescue EOFError
-          finish("disconnected")
-        end
-      end
-
-      handler = Object.new
-      handler.define_singleton_method(:call) do |req|
-        req.handle_bidirectional!(handler_class, paths:)
-      end
-
-      start_stream_server("cleanup_disconnect_inbox", handler)
-      wait_for_backend("cleanup_disconnect_inbox")
-
-      stream = Urpc::Client.new("cleanup_disconnect_inbox", timeout: 5).bidirectional_stream(:call)
-      assert(stream.await_inbox)
-      path = paths.pop
-      stream.close_inbox
-
-      assert_equal("disconnected", stream.result)
-      assert(poll_until { !File.exist?(path) }, "inbox FIFO was not unlinked: #{path}")
-    end
-  end
-
-  def test_bidirectional_stream_multiplexes_with_normal_stream
-    with_broker do
-      bidirectional_class = Class.new(Urpc::BidirectionalHandler) do
-        def run!
-          data(%i[bidir ready])
-          answer = receive
-          finish([:bidir, answer])
-        end
-      end
-
-      bidirectional = bidirectional_handler(bidirectional_class)
-      normal = Class.new do
-        def call(req)
-          req.stream.data(%i[normal a])
-          req.stream.data(%i[normal b])
-          req.stream.return(%i[normal done])
-        end
-      end.new
-
-      start_stream_server("mixed_bidir", bidirectional)
-      start_stream_server("mixed_normal", normal)
-      wait_for_backend("mixed_bidir")
-      wait_for_backend("mixed_normal")
-
-      bidirectional_client = Urpc::Client.new("mixed_bidir", timeout: 5)
-      normal_client = Urpc::Client.new("mixed_normal", timeout: 5)
-      bidirectional_stream = bidirectional_client.bidirectional_stream(:call)
-      normal_stream = normal_client.stream(:call)
-      events = []
-
-      bidirectional_client.each_event(bidirectional_stream, normal_stream) do |stream, event|
-        source = stream.equal?(bidirectional_stream) ? :bidir : :normal
-        events << [source, event.type, event.data]
-        if source == :bidir && event.type == :data
-          bidirectional_stream.send_sync("ok")
-        end
-      end
-
-      bidirectional_events = events.select { it[0] == :bidir }
-      normal_events = events.select { it[0] == :normal }
-
-      assert_equal([
-        [:bidir, :data, %i[bidir ready]],
-        [:bidir, :return, [:bidir, "ok"]],
-      ], bidirectional_events)
-      assert_equal([
-        [:normal, :data, %i[normal a]],
-        [:normal, :data, %i[normal b]],
-        [:normal, :return, %i[normal done]],
-      ], normal_events)
+      yield(client, server)
+    ensure
+      close_io(client)
+      close_io(server&.output)
+      close_io(server&.input)
+      close_io(server&.artifacts)
     end
   end
 end
