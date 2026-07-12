@@ -109,6 +109,18 @@ class UrpcStreamFrameTest < Minitest::Test
     ], frames)
   end
 
+  def test_parser_incrementally_reads_large_compound_payload
+    parser = Urpc::StreamFrame::Parser.new
+    payload = Array.new(2_000) { { time: it, weight: it / 10.0 } }
+    bytes = Urpc::StreamFrame.pack(:return, payload)
+
+    bytes.each_byte.each_slice(16 * 1024) do |chunk|
+      parser.feed(chunk.pack("C*"))
+    end
+
+    assert_equal(Urpc::StreamFrame::Frame.new(type: :return, value: payload), parser.read_frame)
+  end
+
   def test_parser_reports_partial_payload_after_unpacker_consumes_buffer
     parser = Urpc::StreamFrame::Parser.new
     frame = Urpc::StreamFrame.pack(:data, "hello")

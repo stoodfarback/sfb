@@ -119,11 +119,12 @@ module Urpc
         unpacker.feed(buffer)
         buffer.clear
 
-        value = begin
-          unpacker.read
-        rescue EOFError
-          return
+        value = NO_VALUE
+        unpacker.each do |parsed_value|
+          value = parsed_value
+          break
         end
+        return if value.equal?(NO_VALUE)
 
         tag = current_tag
         self.buffer = unpacker.buffer.to_s
