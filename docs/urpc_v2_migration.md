@@ -6,7 +6,7 @@ The authoritative v2 contract is `docs/urpc_v2.md`.
 
 Review note: v2 is a replacement, not a backwards-compatible update, and every v1 user will be migrated manually.
 This is a focused migration guide, not an inventory of v1 features or removals; something existing in v1 does not imply that it belongs in v2 or needs mention here.
-CLI migration belongs to `../urpc_call_rs` after the v2 design is concrete and committed.
+The CLI client migration lives in `../urpc_call_rs`.
 
 ## Service keys
 
@@ -91,6 +91,37 @@ dispatch = Urpc::Dispatch.new(watch: Watch)
 `Urpc::Handler#call` replaces `Urpc::CallHandler#run!`.
 Returning from `call` sends the terminal result unless the handler already called `finish`, `error`, or closed the request.
 Ordinary and streaming calls use the same server and handler path.
+
+## CLI commands
+
+`Urpc::CliCommand` remains the server-side base class for commands invoked by `urpc-call-cli`, now built on the v2 `Urpc::BidirectionalHandler`.
+Map command classes directly through `Urpc::Dispatch`; `Urpc::Req#handle_bidirectional!` and `Urpc::StreamServer` are gone:
+
+```ruby
+dispatch = Urpc::Dispatch.new(
+  verify: VerifyCommand,
+  email_search: EmailSearchCommand,
+)
+
+Urpc::Server.new(RPC_KEY, &dispatch).run
+```
+
+Existing command subclasses keep their command-facing hooks and helpers: `set_defaults!`, `parse_argv!`, `validate!`, `perform!`, `help_text`, stdout/stderr streaming, caller-side filesystem/environment/stdin operations, and cancellation.
+The requested RPC method now supplies `command_name`; constructors no longer receive it explicitly.
+The caller working-directory attribute is now named `caller_cwd` instead of `cwd` so it cannot be confused with the server process working directory.
+
+The CLI request and terminal result are simpler in v2:
+
+- the request uses the ordinary RPC keyword arguments `argv:` and `caller_cwd:` instead of one versioned positional hash
+- the terminal return is the integer exit status instead of `{ status: status }`
+- the default help check recognizes only a lone `-h` or `--help`
+
+Only `OptionParser::ParseError` and `ArgumentError` from `parse_argv!` or `validate!` become usage output with status 2.
+The same exceptions from `perform!` are now remote command failures; v1 accidentally presented them as user input errors.
+
+Do not instantiate another `Urpc::CliCommand` to implement a subcommand.
+One CLI RPC request has one bidirectional input reader owned by its top-level command.
+Dispatch subcommands from that command into plain application objects or methods instead.
 
 ## Client streams
 

@@ -546,6 +546,65 @@ URPC services and clients are trusted local peers, so preserving asynchronous co
 The default `receive_async(value)` raises `NotImplementedError` when an asynchronous input frame is received.
 The default `on_disconnect` does nothing.
 
+### CLI commands
+
+`Urpc::CliCommand` extends `Urpc::BidirectionalHandler` for server-owned commands invoked by `urpc-call-cli`.
+Map each command class through `Urpc::Dispatch` like any other handler:
+
+```ruby
+class Verify < Urpc::CliCommand
+  def help_text
+    "Usage: verify\n"
+  end
+
+  def perform!
+    paths = glob("inbox/*.yml")
+    stdout("found #{paths.size}\n")
+    0
+  end
+end
+
+Urpc::Server.new("service_key", &Urpc::Dispatch.new(verify: Verify)).run
+```
+
+The client submits no positional arguments and exactly two keyword fields:
+
+```ruby
+client.bidirectional(
+  :verify,
+  argv: [...],
+  caller_cwd: "/caller/working/directory",
+)
+```
+
+`argv` must be an array of strings and `caller_cwd` must be a non-empty string.
+Both are exposed as attributes, and `command_name` is the requested RPC method name.
+
+The command lifecycle calls `set_defaults!`, recognizes a lone `-h` or `--help`, then calls `parse_argv!`, `validate!`, and `perform!`.
+`set_defaults!`, `parse_argv!`, and `validate!` default to no-ops; subclasses must implement `perform!`.
+Help writes `help_text` to stdout and returns status 0.
+An `OptionParser::ParseError` or `ArgumentError` raised by `parse_argv!` or `validate!` writes the error and help text to stderr and returns status 2.
+Those exceptions are not converted when raised by `set_defaults!`, `help_text`, `perform!`, output helpers, or caller operations; failures outside argument parsing are command failures and reach the client as remote errors.
+`perform!` returns an integer exit status from 0 through 255; `nil` means 0.
+The terminal value is that integer status directly.
+
+Command output and caller-side operations use `DATA` payloads while synchronous operation results return through the bidirectional input stream.
+`Urpc::CliCommand` exposes:
+
+- `stdout(string)` and `stderr(string)`
+- `glob(pattern)`
+- `read_file_binary(path)` and `read_file_utf8(path)`
+- `list_dir(path)` and `path_info(path)`
+- `read_env(name)` and `list_env(include_values: false)`
+- `read_stdin`
+- `stdin_tty?`, `stdout_tty?`, and `stderr_tty?`
+- `cancelled?`
+
+Relative caller-side paths are resolved by `urpc-call-cli` against the submitted `caller_cwd`.
+An asynchronous `{ type: :cancel }` input or a client input disconnect makes `cancelled?` true.
+Any other asynchronous CLI input is a protocol error.
+Long-running commands must check it at natural cancellation points and normally return status 130 when cancelled.
+
 ### Server execution
 
 `Urpc::Server` is always the one owner of `server.lock` and the one reader of `submit.fifo`.

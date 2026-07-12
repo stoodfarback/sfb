@@ -5,6 +5,7 @@ module Urpc
   autoload(:BidirectionalHandler, "urpc/bidirectional_handler")
   autoload(:BidirectionalInput, "urpc/bidirectional_input")
   autoload(:CallArtifacts, "urpc/call_artifacts")
+  autoload(:CliCommand, "urpc/cli_command")
   autoload(:Client, "urpc/client")
   autoload(:Deadline, "urpc/deadline")
   autoload(:Dispatch, "urpc/dispatch")
