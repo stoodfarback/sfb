@@ -51,7 +51,7 @@ Urpc::Server.new(RPC_KEY, &dispatch).run
 
 Dispatch mappings are duck-typed:
 
-- an object that responds to `new` is treated as a per-request handler factory and evaluated as `handler.new(req).run`
+- an object that responds to `handle` is treated as an endpoint and evaluated as `endpoint.handle(req)`
 - an object that responds to `to_proc`, including a lambda, proc, or bound method, is normalized into an anonymous `Urpc::Handler` subclass
 
 Simple inline methods can therefore be written directly:
@@ -94,7 +94,8 @@ Ordinary and streaming calls use the same server and handler path.
 
 ## CLI commands
 
-`Urpc::CliCommand` remains the server-side base class for commands invoked by `urpc-call-cli`, now built on the v2 `Urpc::BidirectionalHandler`.
+`Urpc::CliCommand` remains the server-side base class for commands invoked by `urpc-call-cli`.
+Each mapped command class creates one `Urpc::CliSession`, which owns the v2 bidirectional handler and input reader while logical command objects share that session.
 Map command classes directly through `Urpc::Dispatch`; `Urpc::Req#handle_bidirectional!` and `Urpc::StreamServer` are gone:
 
 ```ruby
@@ -107,7 +108,11 @@ Urpc::Server.new(RPC_KEY, &dispatch).run
 ```
 
 Existing command subclasses keep their command-facing hooks and helpers: `set_defaults!`, `parse_argv!`, `validate!`, `perform!`, `help_text`, stdout/stderr streaming, caller-side filesystem/environment/stdin operations, and cancellation.
-The requested RPC method now supplies `command_name`; constructors no longer receive it explicitly.
+`Urpc::CliCommand` no longer inherits `Urpc::BidirectionalHandler`; raw transport methods such as `receive`, `disconnected?`, `data`, `finish`, `error`, and `close_input`, along with direct `cancel_requested` access, are no longer part of the command surface.
+Command overrides of `receive_async` and `on_disconnect` are no longer invoked because `Urpc::CliSession` owns input and disconnect handling.
+Commands observe that shared session through `cancelled?` and `finished?` instead.
+The requested RPC method supplies the root `command_name`.
+Command constructors now receive `session:`, `command_name:`, and `argv:` keywords; subclasses with custom initialization must forward them to `super`.
 The caller working-directory attribute is now named `caller_cwd` instead of `cwd` so it cannot be confused with the server process working directory.
 
 The CLI request and terminal result are simpler in v2:
@@ -117,11 +122,17 @@ The CLI request and terminal result are simpler in v2:
 - the default help check recognizes only a lone `-h` or `--help`
 
 Only `OptionParser::ParseError` and `ArgumentError` from `parse_argv!` or `validate!` become usage output with status 2.
-The same exceptions from `perform!` are now remote command failures; v1 accidentally presented them as user input errors.
+Those exceptions from `execute!` or `perform!` are remote command failures.
+V1 accidentally presented exceptions from `perform!` as user input errors.
 
-Do not instantiate another `Urpc::CliCommand` to implement a subcommand.
-One CLI RPC request has one bidirectional input reader owned by its top-level command.
-Dispatch subcommands from that command into plain application objects or methods instead.
+Use `run_subcommand` for logical subcommands:
+
+```ruby
+run_subcommand(command_class, command_name: "tool #{name}", argv: command_argv, api:)
+```
+
+Root and nested commands are ordinary `Urpc::CliCommand` objects.
+Every nested command runs the complete command lifecycle and shares the one `Urpc::CliSession`, bidirectional input reader, caller-operation channel, and cancellation state.
 
 ## Client streams
 

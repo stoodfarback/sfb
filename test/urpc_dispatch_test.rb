@@ -67,7 +67,7 @@ class UrpcDispatchTest < Minitest::Test
 
     assert_equal(["result", "text", 5], dispatch.call(req))
     assert_equal(Urpc::StreamFrame::Frame.new(type: :return, value: ["result", "text", 5]), reader.next_frame)
-    assert(dispatch.handlers.fetch(:search) < Urpc::Handler)
+    assert(dispatch.endpoints.fetch(:search) < Urpc::Handler)
   ensure
     close_req(req)
     close_io(reader)
@@ -109,19 +109,12 @@ class UrpcDispatchTest < Minitest::Test
     end
   end
 
-  def test_handler_factory_is_duck_typed
-    handler_factory = Class.new do
-      attr_accessor(:req)
-
-      def initialize(req)
-        self.req = req
-      end
-
-      def run
-        req.finish("duck handler")
-      end
+  def test_endpoint_is_duck_typed
+    endpoint = Object.new
+    endpoint.define_singleton_method(:handle) do |req|
+      req.finish("duck handler")
     end
-    dispatch = Urpc::Dispatch.new(run: handler_factory)
+    dispatch = Urpc::Dispatch.new(run: endpoint)
     req, reader = req_pair(:run)
 
     assert_nil(dispatch.call(req))
@@ -154,8 +147,8 @@ class UrpcDispatchTest < Minitest::Test
     object_error = assert_raises(ArgumentError) { Urpc::Dispatch.new(bad: Object.new) }
     call_only_error = assert_raises(ArgumentError) { Urpc::Dispatch.new(bad: call_only) }
 
-    assert_includes(object_error.message, "must respond to #new or #to_proc")
-    assert_includes(call_only_error.message, "must respond to #new or #to_proc")
+    assert_includes(object_error.message, "dispatch endpoint must respond to #handle or #to_proc")
+    assert_includes(call_only_error.message, "dispatch endpoint must respond to #handle or #to_proc")
   end
 
   def test_handler_does_not_overwrite_explicit_finish

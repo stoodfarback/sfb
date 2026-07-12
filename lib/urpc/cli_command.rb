@@ -1,20 +1,20 @@
 # frozen_string_literal: true
 
 module Urpc
-  class CliCommand < Urpc::BidirectionalHandler
-    attr_accessor(:command_name, :argv, :caller_cwd, :cancel_requested)
+  class CliCommand
+    attr_accessor(:session, :command_name, :argv)
 
-    def initialize(req)
-      super(req)
-      self.command_name = req.name.to_s
-      self.cancel_requested = false
+    def self.handle(req)
+      Urpc::CliSession.new(req, command_class: self).run
     end
 
-    def call(argv:, caller_cwd:)
-      validate_invocation!(argv:, caller_cwd:)
+    def initialize(session:, command_name:, argv:)
+      self.session = session
+      self.command_name = command_name
       self.argv = argv
-      self.caller_cwd = caller_cwd
+    end
 
+    def run
       set_defaults!
       return show_help if help_requested?
 
@@ -25,12 +25,15 @@ module Urpc
         return show_usage_error(e)
       end
 
-      normalize_status(perform!)
+      normalize_status(execute!)
     end
 
-    def validate_invocation!(argv:, caller_cwd:)
-      raise(ArgumentError, "cli argv must be an Array of String") if !array_of_strings?(argv)
-      raise(ArgumentError, "cli caller_cwd must be a non-empty String") if !non_empty_string?(caller_cwd)
+    def execute!
+      perform!
+    end
+
+    def run_subcommand(command_class, command_name:, argv:, **command_kargs)
+      command_class.new(session:, command_name:, argv:, **command_kargs).run
     end
 
     def show_help
@@ -61,103 +64,68 @@ module Urpc
       "Usage: #{command_name}\n"
     end
 
-    def stdout(payload)
-      raise(ArgumentError, "stdout data must be a String") if !payload.is_a?(String)
-
-      data(type: :stdout, data: payload)
+    def caller_cwd
+      session.caller_cwd
     end
 
-    def stderr(payload)
-      raise(ArgumentError, "stderr data must be a String") if !payload.is_a?(String)
-
-      data(type: :stderr, data: payload)
+    def stdout(...)
+      session.stdout(...)
     end
 
-    def glob(pattern)
-      caller_operation(op: :glob, pattern:)
+    def stderr(...)
+      session.stderr(...)
     end
 
-    def read_file_binary(path)
-      caller_operation(op: :read_file_binary, path:)
+    def glob(...)
+      session.glob(...)
     end
 
-    def read_file_utf8(path)
-      caller_operation(op: :read_file_utf8, path:)
+    def read_file_binary(...)
+      session.read_file_binary(...)
     end
 
-    def list_dir(path)
-      caller_operation(op: :list_dir, path:)
+    def read_file_utf8(...)
+      session.read_file_utf8(...)
     end
 
-    def path_info(path)
-      caller_operation(op: :path_info, path:)
+    def list_dir(...)
+      session.list_dir(...)
     end
 
-    def read_env(name)
-      caller_operation(op: :read_env, name:)
+    def path_info(...)
+      session.path_info(...)
     end
 
-    def list_env(include_values: false)
-      payload = { op: :list_env }
-      if include_values
-        payload[:include_values] = true
-      end
-      caller_operation(payload)
+    def read_env(...)
+      session.read_env(...)
+    end
+
+    def list_env(...)
+      session.list_env(...)
     end
 
     def read_stdin
-      caller_operation(op: :read_stdin)
+      session.read_stdin
     end
 
     def stdin_tty?
-      caller_operation(op: :stdin_tty)
+      session.stdin_tty?
     end
 
     def stdout_tty?
-      caller_operation(op: :stdout_tty)
+      session.stdout_tty?
     end
 
     def stderr_tty?
-      caller_operation(op: :stderr_tty)
+      session.stderr_tty?
     end
 
     def cancelled?
-      cancel_requested == true
+      session.cancelled?
     end
 
-    def receive_async(value)
-      if !value.is_a?(Hash) || value[:type] != :cancel
-        raise(ArgumentError, "unsupported cli async input: #{value.inspect}")
-      end
-
-      self.cancel_requested = true
-    end
-
-    def on_disconnect
-      self.cancel_requested = true
-    end
-
-    def caller_operation(payload)
-      data(payload.merge(type: :op))
-      result = receive
-      raise("malformed cli operation result") if !valid_operation_result?(result)
-
-      if result[:ok]
-        result[:value]
-      else
-        error = result[:error]
-        raise("#{error[:exception]}: #{error[:message]}")
-      end
-    end
-
-    def valid_operation_result?(result)
-      return false if !result.is_a?(Hash)
-      return false if result[:type] != :op_result
-      return true if result[:ok] == true
-      return false if result[:ok] != false
-
-      error = result[:error]
-      error.is_a?(Hash) && error[:exception].is_a?(String) && error[:message].is_a?(String)
+    def finished?
+      session.finished?
     end
 
     def normalize_status(status)
@@ -166,14 +134,6 @@ module Urpc
       raise("invalid cli status: #{status.inspect}") if status < 0 || status > 255
 
       status
-    end
-
-    def array_of_strings?(value)
-      value.is_a?(Array) && value.all?(String)
-    end
-
-    def non_empty_string?(value)
-      value.is_a?(String) && !value.empty?
     end
   end
 end

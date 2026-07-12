@@ -2,17 +2,17 @@
 
 module Urpc
   class Dispatch
-    attr_accessor(:handlers)
+    attr_accessor(:endpoints)
 
-    def initialize(**handlers)
-      self.handlers = handlers.transform_values { normalize_handler(it) }.freeze
+    def initialize(**endpoints)
+      self.endpoints = endpoints.transform_values { normalize_endpoint(it) }.freeze
     end
 
     def call(req)
-      handler_class = handlers.fetch(req.name) do
+      endpoint = endpoints.fetch(req.name) do
         raise(ArgumentError, "unknown urpc method: #{req.name}")
       end
-      handler_class.new(req).run
+      endpoint.handle(req)
     rescue Urpc::ClientDisconnected
       nil
     rescue => e
@@ -37,15 +37,15 @@ module Urpc
       warn("urpc #{req.name} failed: #{error.class}: #{error.message}")
     end
 
-    def normalize_handler(handler)
-      if handler.respond_to?(:new)
-        handler
-      elsif handler.respond_to?(:to_proc)
+    def normalize_endpoint(endpoint)
+      if endpoint.respond_to?(:handle)
+        endpoint
+      elsif endpoint.respond_to?(:to_proc)
         Class.new(Urpc::Handler) do
-          define_method(:call, &handler)
+          define_method(:call, &endpoint)
         end
       else
-        raise(ArgumentError, "urpc dispatch handler must respond to #new or #to_proc: #{handler.inspect}")
+        raise(ArgumentError, "urpc dispatch endpoint must respond to #handle or #to_proc: #{endpoint.inspect}")
       end
     end
   end

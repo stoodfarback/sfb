@@ -83,6 +83,30 @@ class UrpcCliCommandTest < Minitest::Test
     end
   end
 
+  class NestedChild < Urpc::CliCommand
+    attr_accessor(:prefix)
+
+    def initialize(prefix:, **command_kargs)
+      super(**command_kargs)
+      self.prefix = prefix
+    end
+
+    def perform!
+      stdout("#{prefix}|#{command_name}|#{caller_cwd}|#{read_env("NAME")}|#{argv.join(",")}\n")
+      9
+    end
+  end
+
+  class NestedRoot < Urpc::CliCommand
+    def perform!
+      name, *child_argv = argv
+      command_class = name == "cancel" ? WaitForCancel : NestedChild
+      command_kargs = command_class == NestedChild ? { prefix: "nested" } : {}
+
+      run_subcommand(command_class, command_name: "tool #{name}", argv: child_argv, **command_kargs)
+    end
+  end
+
   def test_help_uses_requested_command_name_and_skips_command_body
     with_cli_server(help: Help) do |client|
       stream = cli_stream(client, :help, argv: ["--help"])
@@ -223,6 +247,35 @@ class UrpcCliCommandTest < Minitest::Test
 
       error = assert_raises(ArgumentError) { stream.result }
       assert_equal("unsupported cli async input: {type: :pause}", error.message)
+    end
+  end
+
+  def test_nested_command_uses_full_lifecycle_and_shared_session
+    with_cli_server(nested: NestedRoot) do |client|
+      help_stream = cli_stream(client, :nested, argv: ["child", "--help"])
+      assert_equal([{ type: :stdout, data: "Usage: tool child\n" }], help_stream.to_a)
+      assert_equal(0, help_stream.result)
+
+      stream = cli_stream(client, :nested, argv: ["child", "one", "two"])
+      events = stream.each
+      assert_equal({ type: :op, op: :read_env, name: "NAME" }, events.next)
+      stream.send_sync(type: :op_result, ok: true, value: "value")
+      assert_equal({ type: :stdout, data: "nested|tool child|/workspace|value|one,two\n" }, events.next)
+      assert_raises(StopIteration) { events.next }
+      assert_equal(9, stream.result)
+    end
+  end
+
+  def test_nested_command_observes_session_cancellation
+    with_cli_server(nested: NestedRoot) do |client|
+      stream = cli_stream(client, :nested, argv: ["cancel"])
+      events = stream.each
+      assert_equal({ type: :stdout, data: "started\n" }, events.next)
+
+      stream.send_async(type: :cancel)
+
+      assert_equal({ type: :stdout, data: "cancelled\n" }, events.next)
+      assert_equal(130, stream.result)
     end
   end
 

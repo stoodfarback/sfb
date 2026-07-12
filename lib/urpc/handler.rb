@@ -4,6 +4,10 @@ module Urpc
   class Handler
     attr_accessor(:req)
 
+    def self.handle(req)
+      new(req).run
+    end
+
     def initialize(req)
       self.req = req
     end

@@ -450,7 +450,7 @@ The higher-level bidirectional dispatch interface separates synchronous input fr
 
 ### Class dispatch
 
-`Urpc::Dispatch` maps request names to handler factories or proc-convertible inline handlers.
+`Urpc::Dispatch` maps request names to endpoints or proc-convertible inline handlers.
 
 ```ruby
 dispatch = Urpc::Dispatch.new(
@@ -463,10 +463,10 @@ dispatch = Urpc::Dispatch.new(
 Urpc::Server.new("service_key", &dispatch).run
 ```
 
-Dispatch works by evaluating: `klass.new(req).run`.
-Handler factories are duck-typed: any object that responds to `new` is stored directly, and the object returned by `new(req)` is expected to respond to `run`.
-Mappings that do not respond to `new` must respond to `to_proc`.
-They are normalized during construction into anonymous `Urpc::Handler` subclasses using `define_method(:call, &handler)`.
+Dispatch works by evaluating `endpoint.handle(req)`.
+Endpoints are duck-typed: any object that responds to `handle` is stored directly.
+Mappings that do not respond to `handle` must respond to `to_proc`.
+They are normalized during construction into anonymous `Urpc::Handler` subclasses using `define_method(:call, &endpoint)`.
 Their return values and exceptions therefore use the same lifecycle as explicit handler classes.
 Use an explicit handler class when the implementation needs streaming helpers, bidirectional input, or per-request initialization.
 It converts `StandardError` exceptions from handler construction, invocation, and unknown methods to `req.error`.
@@ -488,6 +488,7 @@ end
 `Urpc::Handler#initialize(req)` stores `req`.
 Subclasses that override `initialize` must call `super(req)`.
 
+`Urpc::Handler.handle(req)` constructs the handler and runs it.
 `Urpc::Handler#run` calls `call(*args, **kargs)`.
 If `call` returns before the request is finished, the return value is sent with `finish`.
 Exception handling belongs to `Urpc::Dispatch`.
@@ -548,7 +549,7 @@ The default `on_disconnect` does nothing.
 
 ### CLI commands
 
-`Urpc::CliCommand` extends `Urpc::BidirectionalHandler` for server-owned commands invoked by `urpc-call-cli`.
+`Urpc::CliCommand` is the base class for server-owned commands invoked by `urpc-call-cli`.
 Map each command class through `Urpc::Dispatch` like any other handler:
 
 ```ruby
@@ -567,6 +568,10 @@ end
 Urpc::Server.new("service_key", &Urpc::Dispatch.new(verify: Verify)).run
 ```
 
+`Urpc::CliCommand.handle(req)` creates one `Urpc::CliSession` for the RPC request.
+The session extends `Urpc::BidirectionalHandler` and owns the request, bidirectional input reader, caller-side operations, output, and cancellation state.
+The command is a plain object that owns only the logical command lifecycle.
+
 The client submits no positional arguments and exactly two keyword fields:
 
 ```ruby
@@ -578,19 +583,38 @@ client.bidirectional(
 ```
 
 `argv` must be an array of strings and `caller_cwd` must be a non-empty string.
-Both are exposed as attributes, and `command_name` is the requested RPC method name.
+Both are exposed to commands, and `command_name` is the requested RPC method name.
 
-The command lifecycle calls `set_defaults!`, recognizes a lone `-h` or `--help`, then calls `parse_argv!`, `validate!`, and `perform!`.
+The command lifecycle calls `set_defaults!`, recognizes a lone `-h` or `--help`, then calls `parse_argv!` and `validate!` before invoking `execute!`.
+`execute!` delegates to `perform!` by default and is the extension point for application-level execution wrappers.
 `set_defaults!`, `parse_argv!`, and `validate!` default to no-ops; subclasses must implement `perform!`.
 Help writes `help_text` to stdout and returns status 0.
 An `OptionParser::ParseError` or `ArgumentError` raised by `parse_argv!` or `validate!` writes the error and help text to stderr and returns status 2.
-Those exceptions are not converted when raised by `set_defaults!`, `help_text`, `perform!`, output helpers, or caller operations; failures outside argument parsing are command failures and reach the client as remote errors.
+Those exceptions are not converted when raised by `set_defaults!`, `help_text`, `execute!`, `perform!`, output helpers, or caller operations; failures outside argument parsing are command failures and reach the client as remote errors.
 `perform!` returns an integer exit status from 0 through 255; `nil` means 0.
 The terminal value is that integer status directly.
+
+Logical subcommands use the same command class and share the existing session:
+
+```ruby
+class Main < Urpc::CliCommand
+  def perform!
+    name, *command_argv = argv
+    command_class = COMMANDS.fetch(name)
+    run_subcommand(command_class, command_name: "tool #{name}", argv: command_argv)
+  end
+end
+```
+
+`run_subcommand` accepts a command class, an explicit `command_name:`, an `argv:`, and optional application constructor keywords.
+It constructs the child with the current session and runs the child's complete help, parsing, validation, execution, and status lifecycle.
+Commands at every nesting depth therefore share one input reader and one cancellation state without receiving the root command or raw request.
 
 Command output and caller-side operations use `DATA` payloads while synchronous operation results return through the bidirectional input stream.
 `Urpc::CliCommand` exposes:
 
+- `command_name`, `argv`, and `caller_cwd`
+- `run_subcommand(command_class, command_name:, argv:, **command_kargs)`
 - `stdout(string)` and `stderr(string)`
 - `glob(pattern)`
 - `read_file_binary(path)` and `read_file_utf8(path)`
@@ -598,7 +622,7 @@ Command output and caller-side operations use `DATA` payloads while synchronous 
 - `read_env(name)` and `list_env(include_values: false)`
 - `read_stdin`
 - `stdin_tty?`, `stdout_tty?`, and `stderr_tty?`
-- `cancelled?`
+- `cancelled?` and `finished?`
 
 Relative caller-side paths are resolved by `urpc-call-cli` against the submitted `caller_cwd`.
 An asynchronous `{ type: :cancel }` input or a client input disconnect makes `cancelled?` true.
