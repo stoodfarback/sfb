@@ -11,6 +11,7 @@ module Sfb
   autoload(:Memo, "sfb/memo")
   autoload(:WaitIndicator, "sfb/wait_indicator")
   autoload(:UrpcKv, "sfb/urpc_kv")
+  autoload(:UrpcPubsub, "sfb/urpc_pubsub")
   autoload(:LexConstShadow, "sfb/lex_const_shadow")
   autoload(:Test, "sfb/test")
   autoload(:TestRunner, "sfb/test_runner")
