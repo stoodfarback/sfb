@@ -58,4 +58,28 @@ class UrpcServiceDirTest < Minitest::Test
       end
     end
   end
+
+  def test_remove_if_unowned_removes_service_dir
+    with_urpc_root do
+      service = Urpc::ServiceDir.new("svc")
+      service.prepare!
+
+      service.remove_if_unowned!
+      assert_equal(false, File.exist?(service.paths.dir))
+    end
+  end
+
+  def test_remove_if_unowned_preserves_owned_service_dir
+    with_urpc_root do
+      service = Urpc::ServiceDir.new("svc")
+      lock = service.acquire_server_lock!
+
+      service.remove_if_unowned!
+      assert(File.directory?(service.paths.dir))
+    ensure
+      if lock && !lock.closed?
+        lock.close
+      end
+    end
+  end
 end
