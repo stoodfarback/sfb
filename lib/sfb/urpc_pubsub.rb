@@ -21,6 +21,13 @@ module Sfb
         rpc_client.call(:publish, normalize_topic(topic), value)
       end
 
+      def publish_try(topic, value)
+        publish(topic, value)
+      rescue Urpc::TransportError => e
+        warn("urpc_pubsub publish failed for #{topic.inspect}: #{e.class}: #{e.message}")
+        nil
+      end
+
       def subscribe(*topics, &block)
         if !block
           raise(ArgumentError, "Sfb::UrpcPubsub.subscribe requires a block")
