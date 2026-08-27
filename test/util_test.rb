@@ -89,26 +89,6 @@ class UtilTest < Minitest::Test
     assert_equal("Hey", noko.text)
   end
 
-  def test_redis
-    key = "Sfb::Util test_redis"
-    Sfb::Util.redis_delete(key)
-
-    assert_nil(Sfb::Util.redis_get(key))
-    assert_equal(false, Sfb::Util.redis_exists?(key))
-    assert_equal(1, Sfb::Util.redis_set(key, 1))
-    assert_equal(true, Sfb::Util.redis_exists?(key))
-    assert_equal(1, Sfb::Util.redis_get(key))
-
-    assert_nil(Sfb::Util.redis_set(key, nil))
-    assert_nil(Sfb::Util.redis_get(key))
-    assert_equal(true, Sfb::Util.redis_exists?(key))
-
-    assert_nil(Sfb::Util.redis_fetch(key) { "one" })
-    Sfb::Util.redis_delete(key)
-    assert_equal("one", Sfb::Util.redis_fetch(key) { "one" })
-    assert_equal("one", Sfb::Util.redis_fetch(key) { "one" })
-  end
-
   def test_rails_helpers
     assert_equal("$1,234.57", Sfb::Util.rails_helpers.number_to_currency(1234.5678))
     assert_equal(Sfb::Util.rails_helpers.object_id, Sfb::Util.rails_helpers.object_id)

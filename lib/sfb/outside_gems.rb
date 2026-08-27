@@ -30,7 +30,6 @@ end
 
 autoload(:Base64, "base64")
 autoload(:Fiddle, "fiddle")
-autoload(:Redis, "redis")
 autoload(:XXhash, "xxhash")
 autoload(:SecureRandom, "securerandom")
 autoload(:Singleton, "singleton")

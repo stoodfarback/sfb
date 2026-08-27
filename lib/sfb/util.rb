@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-$redis ||= Redis.new
-
 module Sfb::Util
   MOST_COMMON_USER_AGENT = <<~HEREDOC.strip
     Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
@@ -168,49 +166,6 @@ module Sfb::Util
 
     def noko(html)
       Nokogiri::HTML(html)
-    end
-
-    def redis
-      $redis ||= Redis.new
-    end
-
-    def redis_exists?(key, redis: self.redis)
-      redis.exists?(key)
-    end
-
-    def redis_get(key, redis: self.redis)
-      if (t = redis.get(key)).present?
-        JSON.parse(t)
-      end
-    end
-
-    def redis_set(key, val, redis: self.redis, **)
-      redis.set(key, val.to_json, **)
-      val
-    end
-
-    def redis_fetch(key, redis: self.redis, **, &blk)
-      if (r = redis.get(key)).present?
-        return(JSON.parse(r))
-      end
-
-      blk.().tap do |r|
-        redis.set(key, r.to_json, **)
-      end
-    end
-
-    def redis_delete(key, redis: self.redis)
-      redis.del(key)
-    end
-
-    def redis_expire(key, seconds, redis: self.redis)
-      redis.expire(key, seconds.to_f.round)
-    end
-
-    def redis_delete_all_with_prefix(prefix, redis: self.redis)
-      keys = redis.keys(prefix + "*")
-      return if keys.empty?
-      redis.del(keys)
     end
 
     def rails_helpers
