@@ -48,7 +48,9 @@ module Urpc
     end
 
     def result
-      each {} if !finished?
+      if !finished?
+        each {}
+      end
 
       raise terminal_error if terminal_error
       terminal_value

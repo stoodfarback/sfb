@@ -265,6 +265,8 @@ class SealedkvTest < Minitest::Test
     Dir.chdir(dir)
     yield
   ensure
-    Dir.chdir(original_dir) if original_dir
+    if original_dir
+      Dir.chdir(original_dir)
+    end
   end
 end

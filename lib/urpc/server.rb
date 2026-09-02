@@ -64,7 +64,9 @@ module Urpc
     def shutdown(primary_error)
       errors = []
       capture_shutdown_error(errors) { close }
-      capture_shutdown_error(errors) { service.remove_if_unowned! } if temporary
+      if temporary
+        capture_shutdown_error(errors) { service.remove_if_unowned! }
+      end
 
       if primary_error
         errors.each { report_shutdown_error(it) }
