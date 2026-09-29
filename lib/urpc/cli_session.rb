@@ -46,6 +46,16 @@ module Urpc
       caller_operation(op: :read_file_utf8, path:)
     end
 
+    def check_writable(path)
+      caller_operation(op: :check_writable, path:)
+    end
+
+    def write_file_binary(path, bytes)
+      raise(ArgumentError, "write_file_binary bytes must be a String") if !bytes.is_a?(String)
+
+      caller_operation(op: :write_file_binary, path:, bytes:)
+    end
+
     def list_dir(path)
       caller_operation(op: :list_dir, path:)
     end

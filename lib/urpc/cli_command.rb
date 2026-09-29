@@ -88,6 +88,14 @@ module Urpc
       session.read_file_utf8(...)
     end
 
+    def check_writable(...)
+      session.check_writable(...)
+    end
+
+    def write_file_binary(...)
+      session.write_file_binary(...)
+    end
+
     def list_dir(...)
       session.list_dir(...)
     end
