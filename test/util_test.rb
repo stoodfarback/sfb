@@ -40,7 +40,7 @@ class UtilTest < Minitest::Test
   def test_http_get
     html = Sfb::Util.http_get("http://example.com")
     noko = Sfb::Util.noko(html)
-    assert_equal("Example Domain", noko.at_css("h1").text)
+    assert_equal("Example Domain", noko.at_css("title").text)
   end
 
   def test_http_agent
