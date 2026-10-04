@@ -30,6 +30,10 @@ module Sfb
       rpc(:expire, valid_string!(key), seconds)
     end
 
+    def self.keys_with_prefix(prefix)
+      rpc(:keys_with_prefix, valid_string!(prefix))
+    end
+
     def self.delete_all_with_prefix(prefix)
       rpc(:delete_all_with_prefix, valid_string!(prefix))
     end
@@ -114,6 +118,10 @@ module Sfb
 
       def expire(key, seconds)
         Sfb::UrpcKv.expire(full_key(key), seconds)
+      end
+
+      def keys
+        Sfb::UrpcKv.keys_with_prefix(prefix).map { it.byteslice(prefix.bytesize..) }
       end
 
       def delete_all
