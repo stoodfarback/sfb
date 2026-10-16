@@ -12,7 +12,7 @@ require("pathname")
 # Golden path:
 #   assert_snapshot(actual)                # implied name from class + test method
 #   assert_snapshot(actual, "my/key")      # explicit key (trusted to be unique)
-#   assert_snapshot_dir("/tmp/out_dir")    # tree + file contents (binary files summarized)
+#   assert_snapshot_dir("/tmp/out_dir")    # tree + contents; summarizes binaries, doesn't follow symlinks
 #   snapshot_cache("label") { expensive }  # JSON cache in `fixtures_dir`
 #
 # Fixtures live under `fixtures_dir` (default: `test/fixtures/snapshots`).
@@ -128,7 +128,7 @@ module Sfb::Test::Snapshot
     lines.concat(snapshot_render_tree(dir))
 
     file_paths = dir.glob("**/*", File::FNM_DOTMATCH).
-      select(&:file?).
+      select { it.lstat.file? }.
       sort_by { it.relative_path_from(dir).to_s }
 
     file_paths.each do |path|
@@ -184,12 +184,15 @@ module Sfb::Test::Snapshot
       branch = is_last ? "└─ " : "├─ "
       child_prefix = prefix + (is_last ? "   " : "│  ")
       label = entry.basename.to_s
-      if entry.directory?
+      stat = entry.lstat
+      if stat.symlink?
+        label = "#{label} -> #{entry.readlink}"
+      elsif stat.directory?
         label = "#{label}/"
       end
       lines << "#{prefix}#{branch}#{label}"
 
-      if entry.directory?
+      if stat.directory?
         child_entries = entry.children.sort_by { it.basename.to_s }
         if child_entries.any?
           lines.concat(snapshot_render_tree_entries(child_entries, prefix: child_prefix))

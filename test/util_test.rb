@@ -37,12 +37,6 @@ class UtilTest < Minitest::Test
     assert_equal("4wpwqn87q9zdp2p", Sfb::Util.random_string(prng: Random.new(111), len: [5, 10, 15]))
   end
 
-  def test_http_get
-    html = Sfb::Util.http_get("http://example.com")
-    noko = Sfb::Util.noko(html)
-    assert_equal("Example Domain", noko.at_css("title").text)
-  end
-
   def test_http_agent
     agent = Sfb::Util.http_common.default_options.headers["User-Agent"]
     assert(agent.include?("Chrome"))

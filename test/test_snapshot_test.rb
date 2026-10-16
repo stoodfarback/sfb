@@ -216,6 +216,31 @@ class TestSnapshotTest < Minitest::Test
     end
   end
 
+  def test_assert_snapshot_dir_records_symlinks_without_following_them
+    with_sandbox do
+      dir = @sandbox.join("sample_dir")
+      dir.mkpath
+      outside = @sandbox.join("outside")
+      outside.mkpath
+      outside.join("secret.txt").write("external contents")
+      File.symlink("missing.txt", dir.join("broken"))
+      File.symlink(".", dir.join("cycle"))
+      File.symlink("../outside", dir.join("dir_link"))
+      File.symlink("../outside/secret.txt", dir.join("file_link"))
+
+      silence_warn { assert_snapshot_dir(dir, "symlink_dir") }
+
+      assert_equal(<<~TEXT.chomp, File.read(fixture_path_for("symlink_dir", ".txt")))
+        dir=<SNAPSHOT_DIR>
+        == tree ==
+        ├─ broken -> missing.txt
+        ├─ cycle -> .
+        ├─ dir_link -> ../outside
+        └─ file_link -> ../outside/secret.txt
+      TEXT
+    end
+  end
+
   def test_snapshot_cache_writes_on_miss_and_reads_on_hit
     with_sandbox do
       path = fixture_path_for("test_snapshot/snapshot_cache_writes_on_miss_and_reads_on_hit", ".json")

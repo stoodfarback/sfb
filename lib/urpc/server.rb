@@ -22,7 +22,7 @@ module Urpc
       begin
         self.executor.start(paths:, handler:)
         self.lock = service.acquire_server_lock!
-        self.submit_io = File.open(paths.submit_fifo, File::RDWR | File::NONBLOCK)
+        self.submit_io = Urpc::Fifo.open(paths.submit_fifo, File::RDWR | File::NONBLOCK)
         self.submit_reader = Urpc::SubmitReader.new(paths, submit_io)
       rescue => error
         shutdown(error)

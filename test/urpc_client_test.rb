@@ -127,6 +127,19 @@ class UrpcClientTest < Minitest::Test
     end
   end
 
+  def test_cast_rejects_non_fifo_submit_target
+    with_urpc_root do
+      paths = Urpc::Paths.new("svc")
+      FileUtils.mkdir_p(paths.dir)
+      target = File.join(Urpc.root, "target.txt")
+      File.write(target, "original contents")
+      File.symlink(target, paths.submit_fifo)
+
+      assert_raises(RuntimeError) { Urpc::Client.new("svc").cast(:ping) }
+      assert_equal("original contents", File.read(target))
+    end
+  end
+
   def test_stream_raises_no_server_without_creating_artifacts
     with_urpc_root do
       client = Urpc::Client.new("svc", timeout: 1, wait_for_server: false)

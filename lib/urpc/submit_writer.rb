@@ -22,7 +22,7 @@ module Urpc
           open_nonblocking(paths)
         elsif wait_for_server == true
           service.prepare!
-          File.open(paths.submit_fifo, File::WRONLY)
+          Urpc::Fifo.open(paths.submit_fifo, File::WRONLY)
         else
           service.prepare!
           open_nonblocking_until(paths, wait_for_server.to_f)
@@ -34,7 +34,7 @@ module Urpc
     end
 
     def self.open_nonblocking(paths)
-      File.open(paths.submit_fifo, File::WRONLY | File::NONBLOCK)
+      Urpc::Fifo.open(paths.submit_fifo, File::WRONLY | File::NONBLOCK)
     end
 
     def self.open_nonblocking_until(paths, wait_seconds)
